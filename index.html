@@ -104,6 +104,21 @@ h1,h2,h3{font-weight:normal}
 #mtabs button{flex:1;border:none;border-radius:0;padding:9px;background:var(--panel)}
 #mtabs button.on{color:var(--gold);border-bottom:2px solid var(--gold)}
 #contBtn{margin-top:12px;font-size:16px;padding:9px 30px;display:none}
+#impWrap{max-width:480px;margin:18px auto 0}
+#impWrap textarea{width:100%;height:60px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px;font-size:11px;font-family:monospace}
+#impMsg{color:var(--danger);font-size:13px;margin-top:4px;min-height:16px}
+#abar{display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:10px;z-index:6;background:rgba(30,24,18,.92);border:1px solid var(--gold);border-radius:10px;padding:6px 8px;gap:8px;align-items:center;max-width:96%;overflow-x:auto}
+#abar .chip{display:flex;align-items:center;gap:4px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:4px 6px;flex:none}
+#abar .cn{font-size:13px;min-width:34px;text-align:center}
+#abar .pm{display:flex;flex-direction:column;gap:2px}
+#abar .pm button{padding:0 6px;font-size:12px;line-height:16px}
+#abar .bact{display:flex;gap:6px;flex:none}
+#abar .bact button{white-space:nowrap}
+.zone{cursor:pointer}
+.zc{fill:#54707c;stroke:#2c3b42;stroke-width:1.5;opacity:.92}
+.zone.zsel .zc{stroke:#fffbe8;stroke-width:3}
+.zone.ztgt .zc{stroke:var(--gold);stroke-width:3;stroke-dasharray:6 4}
+.zn{font-size:11px;fill:#41575f;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:#b6c2b6;stroke-width:2px}
 @media (max-width:760px){
   #main{flex-direction:column}
   #mapwrap{min-height:0}
@@ -133,6 +148,7 @@ h1,h2,h3{font-weight:normal}
     <div class="rivalrow" id="rivalrow"></div>
     <button id="startBtn" class="primary">Begin the conquest</button>
     <div><button id="contBtn">Continue saved game</button></div>
+    <div id="impWrap"><textarea id="impT" placeholder="Paste a save code from another device..."></textarea><button id="impBtn">Import save code</button><div id="impMsg"></div></div>
     <div id="startMsg">Select an empire and 2 to 5 rivals.</div>
   </div>
 </div>
@@ -145,6 +161,8 @@ h1,h2,h3{font-weight:normal}
     <span class="stat">Provinces: <b id="hProv">0</b>/40 (need 24)</span>
     <span class="stat">Turn <b id="hTurn">1</b></span>
     <span class="right">
+      <button id="expBtn">Save code</button>
+      <button id="animBtn">Anim: on</button>
       <button id="unitsBtn">Units</button>
       <button id="tiltBtn">Tilt: on</button>
       <button id="endTurn" class="primary">End turn</button>
@@ -153,6 +171,7 @@ h1,h2,h3{font-weight:normal}
   <div id="main">
     <div id="mapwrap" class="tilted">
       <div id="tiltbox"><svg id="map" preserveAspectRatio="xMidYMid meet"></svg></div>
+      <div id="abar"></div>
       <div id="zoomctl">
         <button id="zin">+</button>
         <button id="zout">&minus;</button>
@@ -161,7 +180,7 @@ h1,h2,h3{font-weight:normal}
     </div>
     <div id="side">
       <div id="mtabs"><button id="tabProv" class="on">Province</button><button id="tabLog">Chronicle</button></div>
-      <div id="help"><b>How to play:</b> click one of your provinces on the map, buy units, set how many to send, press <b>Choose target</b>, then click a highlighted neighbour. Drag to pan, scroll to zoom. Dashed blue arcs are sea routes. New recruits move next turn. Cavalry can act twice each turn (march, then march or attack again).</div>
+      <div id="help"><b>How to play:</b> click one of your provinces, buy units, compose your force in the bar under the map, press <b>Choose target</b>, then click a highlighted province. Ship icons on the water are seas: build War Galleys from coastal provinces, and while your fleet holds a sea (and no enemy fleet is there) your armies can cross between its coasts. New recruits and ships act next turn. Cavalry acts twice each turn.</div>
       <div id="panel"><div class="meta">Click a province to inspect it.</div></div>
       <div id="logwrap"><h3>Chronicle</h3><div id="log"></div></div>
     </div>
@@ -193,6 +212,20 @@ const EMPIRES={
  son:{name:'Song Dynasty',color:'#1d9e9e',cap:'nch',region:'East Asia'},
  mal:{name:'Mali Empire',color:'#e0742e',cap:'waf',region:'West Africa'}
 };
+const SHIP={name:'War Galley',cost:30,pow:2.0};
+const ZONES={
+ nsea:{name:'North Sea',x:220,y:128,coasts:['ire','bri','sca','fra','ger','pol'],adj:['wmed','satl']},
+ wmed:{name:'W. Mediterranean',x:255,y:315,coasts:['ibe','fra','ita','mag'],adj:['nsea','emed','satl']},
+ emed:{name:'E. Mediterranean',x:460,y:361,coasts:['ita','bal','ana','lev','egy','mag','rus'],adj:['wmed']},
+ satl:{name:'Atlantic Coast',x:120,y:663,coasts:['ibe','mag','waf','con','saf'],adj:['nsea','wmed','indo']},
+ redg:{name:'Red Sea & Gulf',x:585,y:498,coasts:['egy','ara','eth','mes','per'],adj:['arab']},
+ arab:{name:'Arabian Sea',x:820,y:563,coasts:['ara','per','del','dec','eth'],adj:['redg','indo']},
+ indo:{name:'Indian Ocean',x:1000,y:723,coasts:['dec','del','bur','khm','mal','ind','swa','saf'],adj:['arab','satl','scs']},
+ scs:{name:'South China Sea',x:1330,y:578,coasts:['sch','khm','mal','ind','phi'],adj:['indo','esea']},
+ esea:{name:'Eastern Sea',x:1440,y:368,coasts:['nch','kor','jap','sch','phi'],adj:['scs']}
+};
+const COASTZ={};
+for(const z in ZONES)ZONES[z].coasts.forEach(p=>{(COASTZ[p]=COASTZ[p]||[]).push(z);});
 const CAPOF={};
 for(const k in EMPIRES) CAPOF[EMPIRES[k].cap]=k;
 const NEED=24;
@@ -236,9 +269,16 @@ function newGame(playerKey,rivalKeys){
     }
     G.prov[key]=pr;
   }
-  MAPD.ladj.concat(MAPD.sea).forEach(e=>{
+  G.animQ=[];
+  MAPD.ladj.forEach(e=>{
     G.prov[e[0]].adj.push(e[1]);
     G.prov[e[1]].adj.push(e[0]);
+  });
+  G.fleets={};G.fmoved={};
+  for(const z in ZONES){G.fleets[z]={};G.fmoved[z]={};}
+  players.forEach(k=>{
+    const capZones=COASTZ[EMPIRES[k].cap];
+    if(capZones&&capZones.length)G.fleets[capZones[0]][k]=1;
   });
   log('Turn 1 — the age of crowns begins. Hold '+NEED+' of 40 provinces to rule the world.','turnmark');
   G.emp[playerKey].gold+=incomeOf(playerKey);
@@ -304,8 +344,11 @@ function oddsLabel(p){
   return 'Risky';
 }
 
+function domType(a){let best='spear',n=-1;for(const t in a){if(a[t]>n){n=a[t];best=t;}}return best;}
+
 function battle(fromKey,toKey,force,attackerKey){
   const to=G.prov[toKey],from=G.prov[fromKey];
+  if(G.animQ)G.animQ.push({from:fromKey,to:toKey,e:attackerKey,t:domType(force)});
   const rep={from,to,attackerKey,defOwner:to.owner,defVolley:0,attVolley:0,attLost:0,defLost:0,win:false};
   const att=force,def=to.army;
   const defStart=cnt(def),attStart=cnt(att);
@@ -398,6 +441,7 @@ function takeForce(p,want,forMove){
 
 function moveFriendly(fromKey,toKey,force,freshCav){
   const to=G.prov[toKey];
+  if(G.animQ)G.animQ.push({from:fromKey,to:toKey,e:to.owner,t:domType(force)});
   for(const t in force){
     to.army[t]=(to.army[t]||0)+force[t];
     if(t==='cavalry'){
@@ -409,6 +453,52 @@ function moveFriendly(fromKey,toKey,force,freshCav){
       to.moved[t]=(to.moved[t]||0)+force[t];
     }
   }
+}
+
+function fleetOf(z,e){return (G.fleets[z]&&G.fleets[z][e])||0;}
+function enemyFleetIn(z,e){
+  for(const k in G.fleets[z])if(k!==e&&G.fleets[z][k]>0)return k;
+  return null;
+}
+function canCross(e,z){return fleetOf(z,e)>0&&!enemyFleetIn(z,e);}
+function seaNeighbors(p,e){
+  const out=[];
+  (COASTZ[p.key]||[]).forEach(z=>{
+    if(canCross(e,z))ZONES[z].coasts.forEach(c=>{
+      if(c!==p.key&&!out.includes(c)&&!p.adj.includes(c))out.push(c);
+    });
+  });
+  return out;
+}
+function reachable(p,e){return p.adj.concat(seaNeighbors(p,e));}
+function fleetAvail(z,e){return fleetOf(z,e)-((G.fmoved[z]&&G.fmoved[z][e])||0);}
+function addFleet(z,e,n,moved){
+  G.fleets[z][e]=(G.fleets[z][e]||0)+n;
+  if(moved)G.fmoved[z][e]=(G.fmoved[z][e]||0)+n;
+}
+function moveFleetTo(z1,z2,e){
+  const n=fleetAvail(z1,e);
+  if(n<=0||!ZONES[z1].adj.includes(z2))return 0;
+  G.fleets[z1][e]-=n;
+  addFleet(z2,e,n,true);
+  return n;
+}
+function navalBattle(z,att,def){
+  const a=fleetOf(z,att),d=fleetOf(z,def);
+  const Sa=a*rand(0.85,1.15),Sd=d*rand(0.85,1.15);
+  const rep={z,att,def,a,d,win:false,attLost:0,defLost:0};
+  if(Sa>Sd){
+    const lost=Math.min(Math.round(a*0.5*Sd/Sa),a-1);
+    G.fleets[z][att]=a-lost;G.fmoved[z][att]=a-lost;
+    G.fleets[z][def]=0;
+    rep.win=true;rep.attLost=lost;rep.defLost=d;
+  }else{
+    const dl=Math.min(Math.round(d*0.5*Sa/Sd),d-1);
+    G.fleets[z][def]=d-dl;
+    G.fleets[z][att]=0;
+    rep.attLost=a;rep.defLost=dl;
+  }
+  return rep;
 }
 
 const PERS={
@@ -447,12 +537,32 @@ function aiTurn(k){
     p.army[t]=(p.army[t]||0)+1;
     p.moved[t]=(p.moved[t]||0)+1;
   }
+  // navy: build galleys from coastal frontier wealth
+  const coastal=provsOf(k).filter(p=>COASTZ[p.key]);
+  let totalFleet=0;for(const z in ZONES)totalFleet+=fleetOf(z,k);
+  if(coastal.length&&e.gold>=SHIP.cost+20&&totalFleet<4&&Math.random()<0.5){
+    const p=pick(coastal);
+    const z=pick(COASTZ[p.key]);
+    e.gold-=SHIP.cost;
+    addFleet(z,k,1,true);
+  }
+  // navy: attack enemy fleets sharing a zone when stronger
+  for(const z in ZONES){
+    if(G.over)return;
+    const mine=fleetAvail(z,k);
+    if(mine<=0)continue;
+    const foe=enemyFleetIn(z,k);
+    if(foe&&mine>=fleetOf(z,foe)){
+      const rep=navalBattle(z,k,foe);
+      log(empName(k)+(rep.win?' swept ':' was repelled by ')+empName(foe)+"'s fleet in the "+ZONES[z].name+'.');
+    }
+  }
   for(const p of provsOf(k)){
     if(G.over)return;
     const force=availArmy(p);
     if(cnt(force)<3)continue;
     let best=null;
-    for(const nk of p.adj){
+    for(const nk of reachable(p,k)){
       const n=G.prov[nk];
       if(n.owner===k)continue;
       const Sa=strength(force,n.army,false,false);
@@ -507,6 +617,7 @@ const ICON={
  longbow:'<path d="M5 1.5 Q12.5 8 5 14.5" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M5 1.5 L5 14.5" stroke="currentColor" stroke-width="0.8" fill="none"/><path d="M5 8 L11.5 8" stroke="currentColor" stroke-width="1" fill="none"/><path d="M14 8 L10.8 6.6 L10.8 9.4 Z" fill="currentColor"/>',
  crossbow:'<path d="M3 5.5 Q8 1 13 5.5" stroke="currentColor" stroke-width="1.6" fill="none"/><path d="M3 5.5 L13 5.5" stroke="currentColor" stroke-width="0.8" fill="none"/><path d="M8 3 L8 14" stroke="currentColor" stroke-width="1.8" fill="none"/><path d="M6 11.5 L10 11.5" stroke="currentColor" stroke-width="1.4" fill="none"/>',
  cavalry:'<path d="M4 14 L4.6 9.5 Q4.6 5.5 8.2 4.6 L9 2.2 L10.6 4.8 Q13.6 5.8 13.4 9.6 L11.2 9 Q11 7.4 9.6 7 Q11.6 9.6 9.4 10.8 L9.4 14 Z" fill="currentColor"/>',
+ ship:'<path d="M2 10.5 L14 10.5 L11.8 14 L4.2 14 Z" fill="currentColor"/><path d="M8 2.5 L8 10.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M8 2.5 Q13.5 5.5 8 9 Z" fill="currentColor"/>',
  catapult:'<circle cx="4" cy="13" r="1.4" fill="currentColor"/><circle cx="11.5" cy="13" r="1.4" fill="currentColor"/><path d="M2 11.5 L14 11.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M4.5 11 L12 3.5" stroke="currentColor" stroke-width="1.6" fill="none"/><circle cx="12.4" cy="3.2" r="1.7" fill="currentColor"/><path d="M8 11 L6.2 7.5" stroke="currentColor" stroke-width="1.2" fill="none"/>'
 };
 function uicon(t,col){return '<svg class="uic" viewBox="0 0 16 16" style="color:'+(col||'#e8dcc8')+'">'+ICON[t]+'</svg>';}
@@ -552,6 +663,51 @@ const FLAVOR={
  cavalry:'Riders run down archers and overrun siege crews. Acts twice each turn.',
  catapult:'Rocks smash packed formations and crossbow lines.'
 };
+let ANIM_ON=true;
+function playAnims(done){
+  const q=(G&&G.animQ)?G.animQ:[];
+  if(G)G.animQ=[];
+  if(!ANIM_ON||!q.length){if(done)done();return;}
+  const svg=$('map');
+  const layer=document.createElementNS(SVGNS,'g');
+  svg.appendChild(layer);
+  let i=0;
+  function next(){
+    if(i>=q.length){svg.removeChild(layer);if(done)done();return;}
+    const ev=q[i++];
+    const a=G.prov[ev.from],b=G.prov[ev.to];
+    if(!a||!b){next();return;}
+    layer.innerHTML='<g style="color:'+empColor(ev.e)+'"><circle cx="8" cy="8" r="11" fill="'+empColor(ev.e)+'" opacity="0.35"/>'+ICON[ev.t]+'</g>';
+    const g=layer.firstChild;
+    const t0=performance.now(),dur=280;
+    function frame(now){
+      const k=Math.min(1,(now-t0)/dur);
+      g.setAttribute('transform','translate('+(a.cx+(b.cx-a.cx)*k-8)+' '+(a.cy+(b.cy-a.cy)*k-8)+')');
+      if(k<1)requestAnimationFrame(frame);else next();
+    }
+    requestAnimationFrame(frame);
+  }
+  next();
+}
+function exportSave(){
+  if(!G)return;
+  const code=btoa(unescape(encodeURIComponent(JSON.stringify(G))));
+  showModal('Save code',
+    '<div class="meta">Copy this code, then paste it into Import save code on the start screen of any device.</div>'+
+    '<textarea id="expT" readonly style="width:100%;height:130px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:10px;font-family:monospace">'+code+'</textarea>',
+    [['Copy code',()=>{const t=$('expT');t.select();try{document.execCommand('copy');}catch(e){}},''],['Close',closeModal,'primary']]);
+}
+function importSave(){
+  const txt=($('impT').value||'').trim();
+  const msg=$('impMsg');
+  if(!txt){msg.textContent='Paste a save code first.';return;}
+  try{
+    const d=JSON.parse(decodeURIComponent(escape(atob(txt))));
+    if(!d||!d.prov)throw 0;
+    localStorage.setItem('aocsave',JSON.stringify(d));
+    loadGame();
+  }catch(e){msg.textContent='That code could not be read. Make sure you pasted the whole code.';}
+}
 function saveGame(){
   if(!G||G.over)return;
   try{localStorage.setItem('aocsave',JSON.stringify(G));}catch(e){}
@@ -562,6 +718,12 @@ function loadGame(){
   try{d=JSON.parse(localStorage.getItem('aocsave'));}catch(e){}
   if(!d||!d.prov)return false;
   G=d;
+  G.animQ=[];
+  G.selZone=null;G.zoneTargeting=false;G.send={};
+  if(!G.fleets){
+    G.fleets={};G.fmoved={};
+    for(const z in ZONES){G.fleets[z]={};G.fmoved[z]={};}
+  }
   $('start').style.display='none';
   $('game').style.display='flex';
   initMap();
@@ -595,21 +757,13 @@ function initMap(){
   const svg=$('map');
   svg.innerHTML='';
   const mk=(tag,attrs)=>{const el=document.createElementNS(SVGNS,tag);for(const a in attrs)el.setAttribute(a,attrs[a]);return el;};
-  const gSea=mk('g',{id:'gSea'}),gProv=mk('g',{id:'gProv'}),gTer=mk('g',{id:'gTer'}),gMt=mk('g',{id:'gMt'}),gPin=mk('g',{id:'gPin'});
-  svg.appendChild(gSea);svg.appendChild(gProv);svg.appendChild(gTer);svg.appendChild(gMt);svg.appendChild(gPin);
+  const gProv=mk('g',{id:'gProv'}),gTer=mk('g',{id:'gTer'}),gMt=mk('g',{id:'gMt'}),gPin=mk('g',{id:'gPin'}),gZone=mk('g',{id:'gZone'});
+  svg.appendChild(gProv);svg.appendChild(gTer);svg.appendChild(gMt);svg.appendChild(gPin);svg.appendChild(gZone);
   for(const k in MAPD.prov){
     const el=mk('path',{d:MAPD.prov[k].d,'data-k':k,'class':'pv','fill':PARCH});
     el.setAttribute('fill-rule','evenodd');
     gProv.appendChild(el);
   }
-  MAPD.sea.forEach(s=>{
-    const a=MAPD.prov[s[0]],b=MAPD.prov[s[1]];
-    const mx=(a.cx+b.cx)/2,my=(a.cy+b.cy)/2;
-    const dx=b.cx-a.cx,dy=b.cy-a.cy,len=Math.max(1,Math.hypot(dx,dy));
-    const ox=-dy/len*len*0.14,oy=dx/len*len*0.14;
-    const el=mk('path',{d:'M'+a.cx+' '+a.cy+' Q'+(mx+ox)+' '+(my+oy)+' '+b.cx+' '+b.cy,'class':'searoute','data-sea':s[0]+'|'+s[1]});
-    gSea.appendChild(el);
-  });
   TERRAIN.forEach(t=>{
     gTer.appendChild(mk('rect',{x:t[0],y:t[1],width:t[2],height:t[3],rx:45,fill:t[4],opacity:t[5],'pointer-events':'none'}));
   });
@@ -636,16 +790,12 @@ function zoomBy(f){
 
 function updateMap(){
   const svg=$('map');
-  const targets=G.targeting&&G.sel?G.prov[G.sel].adj:[];
+  const targets=G.targeting&&G.sel?reachable(G.prov[G.sel],G.player):[];
   svg.querySelectorAll('#gProv path').forEach(el=>{
     const k=el.getAttribute('data-k'),p=G.prov[k];
     el.setAttribute('fill',p.owner==='neutral'?PARCH:blend(PARCH,empColor(p.owner),0.5));
     el.classList.toggle('sel',G.sel===k);
     el.classList.toggle('target',targets.includes(k));
-  });
-  svg.querySelectorAll('.searoute').forEach(el=>{
-    const s=el.getAttribute('data-sea').split('|');
-    el.classList.toggle('target',G.targeting&&G.sel&&(s[0]===G.sel&&targets.includes(s[1])||s[1]===G.sel&&targets.includes(s[0])));
   });
   let ph='';
   Object.values(G.prov).forEach(p=>{
@@ -654,16 +804,38 @@ function updateMap(){
     ph+='<circle cx="'+p.cx+'" cy="'+p.cy+'" r="6" fill="'+col+'" data-k="'+p.key+'"/>';
     if(p.capOf)ph+='<text class="cap" x="'+p.cx+'" y="'+(p.cy-11)+'">&#9733;</text>';
     ph+='<text class="lbl" x="'+p.cx+'" y="'+(p.cy+20)+'">'+p.city+'('+cnt(p.army)+')</text>';
-    const types=UKEYS.filter(t=>p.army[t]).sort((a,b)=>p.army[b]-p.army[a]).slice(0,3);
-    if(types.length){
-      const w=types.length*13+5;
-      const bx=p.cx+9,by=p.cy-22;
-      ph+='<rect x="'+bx+'" y="'+by+'" width="'+w+'" height="16" rx="4" fill="'+col+'" stroke="#241d17" stroke-width="1"/>';
-      types.forEach((t,i)=>{ ph+=mapIcon(t,bx+2.5+i*13,by+1.5,'#f5edd8'); });
+    const tot=cnt(p.army);
+    if(tot>0){
+      const dt=domType(p.army);
+      const w=17+String(tot).length*7+8;
+      const bx=p.cx+9,by=p.cy-23;
+      ph+='<rect x="'+bx+'" y="'+by+'" width="'+w+'" height="17" rx="4" fill="'+col+'" stroke="#241d17" stroke-width="1"/>';
+      ph+=mapIcon(dt,bx+2,by+2,'#f5edd8');
+      ph+='<text x="'+(bx+w-4)+'" y="'+(by+13)+'" text-anchor="end" font-size="11" font-weight="bold" fill="#fff" style="paint-order:stroke;stroke:#241d17;stroke-width:2px">'+tot+'</text>';
     }
     ph+='</g>';
   });
   $('map').querySelector('#gPin').innerHTML=ph;
+  let zh='';
+  for(const z in ZONES){
+    const Z=ZONES[z];
+    const selCls=G.selZone===z?' zsel':'';
+    const tgtCls=G.zoneTargeting&&G.selZone&&ZONES[G.selZone].adj.includes(z)?' ztgt':'';
+    zh+='<g class="zone'+selCls+tgtCls+'" data-z="'+z+'">';
+    zh+='<circle cx="'+Z.x+'" cy="'+Z.y+'" r="13" class="zc"/>';
+    zh+=mapIcon('ship',Z.x-6.5,Z.y-7,'#dfeaf2');
+    zh+='<text class="zn" x="'+Z.x+'" y="'+(Z.y+27)+'">'+Z.name+'</text>';
+    let fx=Z.x+16;
+    for(const e in G.fleets[z]){
+      if(!G.fleets[z][e])continue;
+      zh+='<rect x="'+fx+'" y="'+(Z.y-10)+'" width="26" height="15" rx="4" fill="'+empColor(e)+'" stroke="#241d17" stroke-width="1"/>';
+      zh+='<text x="'+(fx+13)+'" y="'+(Z.y+2)+'" text-anchor="middle" font-size="10" font-weight="bold" fill="#fff" style="paint-order:stroke;stroke:#241d17;stroke-width:2px">'+G.fleets[z][e]+'</text>';
+      fx+=28;
+    }
+    zh+='</g>';
+  }
+  $('map').querySelector('#gZone').innerHTML=zh;
+  renderBar();
 }
 
 function initInput(){
@@ -707,8 +879,11 @@ function initInput(){
     svg.classList.remove('dragging');
     if(ptrs.size===0){
       if(dragging&&moved<=6){
-        const t=downT&&downT.closest?downT.closest('[data-k]'):null;
-        if(t)provClick(t.getAttribute('data-k'));
+        const t=downT&&downT.closest?downT.closest('[data-k],[data-z]'):null;
+        if(t){
+          const zk=t.getAttribute('data-z');
+          if(zk)zoneClick(zk);else provClick(t.getAttribute('data-k'));
+        }
       }
       dragging=false;
     }
@@ -743,28 +918,120 @@ function renderAll(){updateMap();renderHdr();}
 function provClick(k){
   if(G.over)return;
   const p=G.prov[k];
-  if(G.targeting&&G.sel&&G.prov[G.sel].adj.includes(k)){
+  if(G.targeting&&G.sel&&reachable(G.prov[G.sel],G.player).includes(k)){
     const from=G.prov[G.sel];
     const want={};
-    UKEYS.forEach(t=>{
-      const inp=$('send_'+t);
-      if(inp)want[t]=Math.max(0,Math.min(parseInt(inp.value)||0,avail(from,t)));
-    });
+    UKEYS.forEach(t=>{want[t]=Math.max(0,Math.min((G.send&&G.send[t])||0,avail(from,t)));});
     if(cnt(want)===0){G.targeting=false;renderAll();openPanel(G.sel);return;}
     if(p.owner===G.player){
       const r=takeForce(from,want,true);
       moveFriendly(G.sel,k,r.force,r.freshCav);
       log('You marched '+cnt(r.force)+' troops from '+from.name+' to '+p.name+'.');
-      G.targeting=false;renderAll();openPanel(k);
+      G.targeting=false;
+      playAnims(()=>{renderAll();openPanel(k);saveGame();});
     }else{
       confirmAttack(G.sel,k,want);
     }
     return;
   }
-  G.targeting=false;
+  G.targeting=false;G.zoneTargeting=false;G.selZone=null;
+  if(G.sel!==k)G.send={};
   G.sel=k;
   renderAll();
   openPanel(k);
+}
+function zoneClick(z){
+  if(G.over)return;
+  if(G.zoneTargeting&&G.selZone&&ZONES[G.selZone].adj.includes(z)){
+    const n=moveFleetTo(G.selZone,z,G.player);
+    if(n)log('Your fleet of '+n+' galley'+(n>1?'s':'')+' sailed to the '+ZONES[z].name+'.');
+    G.zoneTargeting=false;
+    G.selZone=z;
+    renderAll();
+    openZonePanel(z);
+    saveGame();
+    return;
+  }
+  G.zoneTargeting=false;G.targeting=false;G.sel=null;
+  G.selZone=z;
+  renderAll();
+  openZonePanel(z);
+}
+function openZonePanel(z){
+  const Z=ZONES[z];
+  const mine=fleetOf(z,G.player);
+  const av=fleetAvail(z,G.player);
+  const foes=[];
+  for(const e in G.fleets[z]){if(e!==G.player&&G.fleets[z][e]>0)foes.push(e);}
+  let h='<h3>'+uicon('ship','#c9a227')+Z.name+'</h3>';
+  h+='<div class="meta">'+(mine?('Your fleet: '+mine+' galley'+(mine>1?'s':'')+' ('+av+' ready)'):'You have no fleet in this sea.')+'</div>';
+  foes.forEach(e=>{h+='<div class="meta" style="color:'+empColor(e)+'">'+empName(e)+': '+G.fleets[z][e]+' galleys</div>';});
+  if(mine&&!foes.length)h+='<div class="meta">You control this sea: your armies may cross between any of its coasts.</div>';
+  else if(foes.length)h+='<div class="meta">Enemy fleets block all crossings here until driven off.</div>';
+  else h+='<div class="meta">Without a fleet here, your armies cannot cross this sea.</div>';
+  if(av>0){
+    h+='<button class="primary" style="width:100%;margin-top:6px" onclick="startZoneTargeting()">'+(G.zoneTargeting?'Click a highlighted sea':'Sail to another sea')+'</button>';
+    foes.forEach(e=>{
+      h+='<button style="width:100%;margin-top:6px" onclick="attackFleet(\''+z+'\',\''+e+'\')">Attack '+empName(e)+' ('+av+' vs '+G.fleets[z][e]+')</button>';
+    });
+  }
+  h+='<div class="meta" style="margin-top:8px">Coasts: '+Z.coasts.map(c=>G.prov[c].name).join(', ')+'</div>';
+  $('panel').innerHTML=h;
+  $('side').classList.remove('mlog');
+  document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('on',b.id==='tabProv'));
+}
+function startZoneTargeting(){
+  G.zoneTargeting=true;
+  renderAll();
+  openZonePanel(G.selZone);
+}
+function attackFleet(z,e){
+  const rep=navalBattle(z,G.player,e);
+  log(rep.win?('Your fleet swept '+empName(e)+' from the '+ZONES[z].name+'.'):('Your fleet was broken by '+empName(e)+' in the '+ZONES[z].name+'.'));
+  renderAll();
+  openZonePanel(z);
+  saveGame();
+  showModal(rep.win?'Naval victory':'Fleet lost',
+    (rep.win?'<span class="good">The '+ZONES[z].name+' is yours.</span>':'<span class="bad">Your galleys were sunk.</span>')+'<br>You lost '+rep.attLost+' galleys; the enemy lost '+rep.defLost+'.',
+    [['Continue',closeModal,'primary']]);
+}
+function buyGalley(pk,z){
+  const e=G.emp[G.player];
+  if(e.gold<SHIP.cost||G.prov[pk].owner!==G.player)return;
+  e.gold-=SHIP.cost;
+  addFleet(z,G.player,1,true);
+  renderAll();
+  openPanel(pk);
+}
+function renderBar(){
+  const bar=$('abar');
+  if(!bar)return;
+  if(!G||!G.sel||G.over){bar.style.display='none';return;}
+  const p=G.prov[G.sel];
+  if(!p||p.owner!==G.player){bar.style.display='none';return;}
+  const av=availArmy(p);
+  if(!cnt(av)){bar.style.display='none';return;}
+  if(!G.send)G.send={};
+  let h='';
+  UKEYS.forEach(t=>{
+    const n=av[t]||0;
+    if(!n)return;
+    if(G.send[t]===undefined||G.send[t]>n)G.send[t]=n;
+    h+='<div class="chip">'+uicon(t,'#e8dcc8')+'<span class="cn">'+G.send[t]+'/'+n+'</span><span class="pm"><button onclick="bumpSend(\''+t+'\',-1)">&minus;</button><button onclick="bumpSend(\''+t+'\',1)">+</button></span></div>';
+  });
+  h+='<div class="bact"><button onclick="setSendAll(1)">All</button><button onclick="setSendAll(0)">None</button><button class="primary" onclick="startTargeting()">'+(G.targeting?'Click a target...':'Choose target')+'</button></div>';
+  bar.innerHTML=h;
+  bar.style.display='flex';
+}
+function bumpSend(t,d){
+  const p=G.prov[G.sel];
+  G.send[t]=Math.max(0,Math.min(avail(p,t),(G.send[t]||0)+d));
+  renderBar();
+}
+function setSendAll(on){
+  const p=G.prov[G.sel];
+  UKEYS.forEach(t=>{G.send[t]=on?avail(p,t):0;});
+  renderBar();
 }
 
 function openPanel(k){
@@ -784,15 +1051,13 @@ function openPanel(k){
     UKEYS.forEach(t=>{
       h+='<div class="buildrow"><span>'+uicon(t)+UNITS[t].name+' &mdash; '+UNITS[t].cost+'g</span><button '+(e.gold<UNITS[t].cost?'disabled':'')+' onclick="buyUnit(\''+k+'\',\''+t+'\')">Buy</button></div>';
     });
+    (COASTZ[k]||[]).forEach(z=>{
+      h+='<div class="buildrow"><span>'+uicon('ship')+SHIP.name+' &rarr; '+ZONES[z].name+' &mdash; '+SHIP.cost+'g</span><button '+(e.gold<SHIP.cost?'disabled':'')+' onclick="buyGalley(\''+k+'\',\''+z+'\')">Buy</button></div>';
+    });
     const av=availArmy(p);
     if(cnt(av)>0){
-      h+='<h3 style="font-size:14px;margin-top:8px">March troops</h3>';
-      UKEYS.forEach(t=>{
-        const n=avail(p,t);
-        if(n>0)h+='<div class="steprow"><span>'+uicon(t)+UNITS[t].name+' (max '+n+')</span><input id="send_'+t+'" type="number" min="0" max="'+n+'" value="'+n+'"></div>';
-      });
-      h+='<button class="primary" style="width:100%;margin-top:6px" onclick="startTargeting()">Choose target</button>';
-      if(G.targeting)h+='<div class="meta" style="margin-top:6px">Now click a highlighted neighbour on the map.</div>';
+      h+='<div class="meta" style="margin-top:8px">Compose your force in the bar under the map, then press Choose target.</div>';
+      if(G.targeting)h+='<div class="meta">Now click a highlighted province on the map.</div>';
     }
   }else if(!mine){
     h+='<div class="meta">Select one of your provinces to march against it.</div>';
@@ -830,8 +1095,8 @@ function doAttack(fromKey,toKey,want){
   logBattle(rep);
   G.targeting=false;
   G.sel=rep.win?toKey:fromKey;
-  renderAll();
-  openPanel(G.sel);
+  G.send={};
+  playAnims(()=>{renderAll();openPanel(G.sel);});
   let b=battleCard(snapA,G.player,snapD,snapOwner);
   if(rep.defVolley)b+='Their archers felled '+rep.defVolley+' of your troops as you advanced.<br>';
   if(rep.attVolley)b+='Your archers cut down '+rep.attVolley+' defenders.<br>';
@@ -845,18 +1110,22 @@ function doAttack(fromKey,toKey,want){
 function endTurn(){
   if(G.over)return;
   $('endTurn').disabled=true;
+  G.animQ=[];
   Object.keys(G.emp).forEach(k=>{if(k!==G.player)aiTurn(k);});
-  if(!G.over){
-    G.turn++;
-    Object.values(G.prov).forEach(p=>{p.moved={};p.cavHalf=0;});
-    G.emp[G.player].gold+=incomeOf(G.player);
-    log('Turn '+G.turn+' — your coffers grow by '+incomeOf(G.player)+' gold.','turnmark');
-  }
-  $('endTurn').disabled=false;
-  G.targeting=false;
-  renderAll();
-  if(G.sel)openPanel(G.sel);
-  saveGame();
+  playAnims(()=>{
+    if(!G.over){
+      G.turn++;
+      Object.values(G.prov).forEach(p=>{p.moved={};p.cavHalf=0;});
+      for(const z in ZONES)G.fmoved[z]={};
+      G.emp[G.player].gold+=incomeOf(G.player);
+      log('Turn '+G.turn+' — your coffers grow by '+incomeOf(G.player)+' gold.','turnmark');
+    }
+    $('endTurn').disabled=false;
+    G.targeting=false;
+    renderAll();
+    if(G.sel)openPanel(G.sel);
+    saveGame();
+  });
 }
 
 function showModal(title,body,btns){
@@ -942,6 +1211,9 @@ function refreshStart(){
 
 $('endTurn').addEventListener('click',endTurn);
 $('unitsBtn').addEventListener('click',showUnitCards);
+$('animBtn').addEventListener('click',()=>{ANIM_ON=!ANIM_ON;$('animBtn').textContent='Anim: '+(ANIM_ON?'on':'off');});
+$('expBtn').addEventListener('click',exportSave);
+$('impBtn').addEventListener('click',importSave);
 $('tabProv').addEventListener('click',()=>{$('side').classList.remove('mlog');document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('on',b.id==='tabProv'));});
 $('tabLog').addEventListener('click',()=>{$('side').classList.add('mlog');document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('on',b.id==='tabLog'));});
 buildStart();
