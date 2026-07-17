@@ -89,12 +89,36 @@ h1,h2,h3{font-weight:normal}
 .brow .n{margin-left:auto;font-weight:bold}
 .uic{width:14px;height:14px;vertical-align:-2px;margin-right:4px;flex:none}
 #modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:60}
-#modal .box{background:var(--panel);border:2px solid var(--gold);border-radius:10px;padding:22px;max-width:460px;width:92%;max-height:85vh;overflow-y:auto}
+#modal .box{background:var(--panel);border:2px solid var(--gold);border-radius:10px;padding:22px;max-width:540px;width:94%;max-height:85vh;overflow-y:auto}
 #modal h3{color:var(--gold);font-size:20px;margin-bottom:10px}
 #modal .body{font-size:14px;line-height:1.6;margin-bottom:14px}
 #modal .body .good{color:var(--ok)} #modal .body .bad{color:var(--danger)}
 #modal .btns{display:flex;gap:10px;justify-content:flex-end}
-@media (max-width:800px){#side{width:260px}}
+.ucards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.ucard{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12.5px}
+.ucard h4{color:var(--gold);font-size:15px;font-weight:normal;margin:4px 0 2px}
+.ucard .stats{color:var(--muted);margin:3px 0}
+.ucard .flav{font-style:italic;color:var(--muted);margin-top:5px;line-height:1.45}
+.ucard .vs{margin-top:4px}
+#mtabs{display:none;border-bottom:1px solid var(--border)}
+#mtabs button{flex:1;border:none;border-radius:0;padding:9px;background:var(--panel)}
+#mtabs button.on{color:var(--gold);border-bottom:2px solid var(--gold)}
+#contBtn{margin-top:12px;font-size:16px;padding:9px 30px;display:none}
+@media (max-width:760px){
+  #main{flex-direction:column}
+  #mapwrap{min-height:0}
+  #side{width:100%;height:46%;flex:none;border-left:none;border-top:1px solid var(--border)}
+  #help{display:none}
+  #mtabs{display:flex}
+  #side.mlog #panel{display:none}
+  #side:not(.mlog) #logwrap{display:none}
+  #panel{max-height:none;flex:1;border-bottom:none}
+  #hdr{gap:8px;padding:6px 8px}
+  #hdr .title{font-size:15px;letter-spacing:1px}
+  button{padding:8px 12px}
+  .buildrow button{padding:6px 14px}
+}
+@media (min-width:761px) and (max-width:900px){#side{width:260px}}
 </style>
 </head>
 <body>
@@ -108,6 +132,7 @@ h1,h2,h3{font-weight:normal}
     <h2>Choose your rivals (2 to 5)</h2>
     <div class="rivalrow" id="rivalrow"></div>
     <button id="startBtn" class="primary">Begin the conquest</button>
+    <div><button id="contBtn">Continue saved game</button></div>
     <div id="startMsg">Select an empire and 2 to 5 rivals.</div>
   </div>
 </div>
@@ -120,6 +145,7 @@ h1,h2,h3{font-weight:normal}
     <span class="stat">Provinces: <b id="hProv">0</b>/40 (need 24)</span>
     <span class="stat">Turn <b id="hTurn">1</b></span>
     <span class="right">
+      <button id="unitsBtn">Units</button>
       <button id="tiltBtn">Tilt: on</button>
       <button id="endTurn" class="primary">End turn</button>
     </span>
@@ -134,6 +160,7 @@ h1,h2,h3{font-weight:normal}
       </div>
     </div>
     <div id="side">
+      <div id="mtabs"><button id="tabProv" class="on">Province</button><button id="tabLog">Chronicle</button></div>
       <div id="help"><b>How to play:</b> click one of your provinces on the map, buy units, set how many to send, press <b>Choose target</b>, then click a highlighted neighbour. Drag to pan, scroll to zoom. Dashed blue arcs are sea routes. New recruits move next turn. Cavalry can act twice each turn (march, then march or attack again).</div>
       <div id="panel"><div class="meta">Click a province to inspect it.</div></div>
       <div id="logwrap"><h3>Chronicle</h3><div id="log"></div></div>
@@ -515,12 +542,61 @@ function logBattle(rep){
   else log(who+' was repelled at <b>'+rep.to.name+'</b> by '+def+' (lost '+rep.attLost+').');
 }
 
+const RIVERS=['M512 403 L525 453 L529 513 L535 547','M282 223 L330 218 L390 244 L445 248 L497 251','M287 227 L276 198 L261 185 L249 183','M560 133 L650 153 L680 183 L675 223 L670 240','M530 183 L505 199 L525 228','M585 318 L610 343 L644 370 L675 393','M940 363 L910 403 L885 433 L875 463','M980 403 L1020 448 L1080 458 L1100 473','M1230 343 L1270 298 L1310 303 L1330 353 L1370 328','M1170 373 L1240 413 L1320 403 L1380 385','M95 598 L125 578 L160 558 L200 534 L230 588 L260 648','M450 698 L410 683 L370 713 L353 746 L323 763','M1050 183 L1020 153 L930 93 L866 38'];
+const TERRAIN=[[100,423,400,100,'#d8b878',0.2],[620,443,100,80,'#d8b878',0.18],[1170,253,150,50,'#cdb98a',0.16],[320,23,300,80,'#7f9a6d',0.13],[800,23,900,100,'#7f9a6d',0.12],[500,183,800,80,'#c9bd7a',0.1],[320,673,160,70,'#5d8a52',0.15]];
+const FLAVOR={
+ spear:'Braced spears stop a cavalry charge; a shield wall closes on archers.',
+ sword:'Slip past spear points and rush slow-reloading crossbows.',
+ longbow:'Rain volleys on heavy infantry; fire arrows burn siege engines.',
+ crossbow:'Bolts punch through knight armor and shield walls.',
+ cavalry:'Riders run down archers and overrun siege crews. Acts twice each turn.',
+ catapult:'Rocks smash packed formations and crossbow lines.'
+};
+function saveGame(){
+  if(!G||G.over)return;
+  try{localStorage.setItem('aocsave',JSON.stringify(G));}catch(e){}
+}
+function clearSave(){try{localStorage.removeItem('aocsave');}catch(e){}}
+function loadGame(){
+  let d=null;
+  try{d=JSON.parse(localStorage.getItem('aocsave'));}catch(e){}
+  if(!d||!d.prov)return false;
+  G=d;
+  $('start').style.display='none';
+  $('game').style.display='flex';
+  initMap();
+  initInput();
+  if(window.innerWidth<761)$('mapwrap').classList.remove('tilted');
+  $('tiltBtn').textContent='Tilt: '+($('mapwrap').classList.contains('tilted')?'on':'off');
+  renderAll();
+  const el=$('log');
+  if(el)el.innerHTML=G.log.map(l=>'<div class="l '+l.cls+'">'+l.msg+'</div>').join('');
+  const cap=G.prov[EMPIRES[G.player].cap];
+  VB.w=MAPD.W/2.4;VB.h=MAPD.H/2.4;
+  VB.x=cap.cx-VB.w/2;VB.y=cap.cy-VB.h/2;
+  applyVB();
+  return true;
+}
+function showUnitCards(){
+  let h='<div class="ucards">';
+  UKEYS.forEach(t=>{
+    const u=UNITS[t];
+    h+='<div class="ucard">'+uicon(t,'#c9a227')+'<h4>'+u.name+'</h4>';
+    h+='<div class="stats">'+u.cost+' gold &middot; power '+u.pow+'</div>';
+    h+='<div class="vs">Beats: '+u.beats.map(b=>uicon(b,'#5aa858')).join('')+'</div>';
+    h+='<div class="vs">Beaten by: '+UKEYS.filter(e=>UNITS[e].beats.includes(t)).map(b=>uicon(b,'#c94040')).join('')+'</div>';
+    h+='<div class="flav">'+FLAVOR[t]+'</div></div>';
+  });
+  h+='</div>';
+  showModal('The armies of the age',h,[['Close',closeModal,'primary']]);
+}
+
 function initMap(){
   const svg=$('map');
   svg.innerHTML='';
   const mk=(tag,attrs)=>{const el=document.createElementNS(SVGNS,tag);for(const a in attrs)el.setAttribute(a,attrs[a]);return el;};
-  const gSea=mk('g',{id:'gSea'}),gProv=mk('g',{id:'gProv'}),gMt=mk('g',{id:'gMt'}),gPin=mk('g',{id:'gPin'});
-  svg.appendChild(gSea);svg.appendChild(gProv);svg.appendChild(gMt);svg.appendChild(gPin);
+  const gSea=mk('g',{id:'gSea'}),gProv=mk('g',{id:'gProv'}),gTer=mk('g',{id:'gTer'}),gMt=mk('g',{id:'gMt'}),gPin=mk('g',{id:'gPin'});
+  svg.appendChild(gSea);svg.appendChild(gProv);svg.appendChild(gTer);svg.appendChild(gMt);svg.appendChild(gPin);
   for(const k in MAPD.prov){
     const el=mk('path',{d:MAPD.prov[k].d,'data-k':k,'class':'pv','fill':PARCH});
     el.setAttribute('fill-rule','evenodd');
@@ -533,6 +609,12 @@ function initMap(){
     const ox=-dy/len*len*0.14,oy=dx/len*len*0.14;
     const el=mk('path',{d:'M'+a.cx+' '+a.cy+' Q'+(mx+ox)+' '+(my+oy)+' '+b.cx+' '+b.cy,'class':'searoute','data-sea':s[0]+'|'+s[1]});
     gSea.appendChild(el);
+  });
+  TERRAIN.forEach(t=>{
+    gTer.appendChild(mk('rect',{x:t[0],y:t[1],width:t[2],height:t[3],rx:45,fill:t[4],opacity:t[5],'pointer-events':'none'}));
+  });
+  RIVERS.forEach(d=>{
+    gTer.appendChild(mk('path',{d:d,fill:'none',stroke:'#7d98a3','stroke-width':2,'stroke-linecap':'round','stroke-linejoin':'round',opacity:0.65,'pointer-events':'none'}));
   });
   MAPD.mts.forEach(m=>{
     const x=m[0],y=m[1];
@@ -716,6 +798,8 @@ function openPanel(k){
     h+='<div class="meta">Select one of your provinces to march against it.</div>';
   }
   $('panel').innerHTML=h;
+  $('side').classList.remove('mlog');
+  document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('on',b.id==='tabProv'));
 }
 
 function startTargeting(){
@@ -754,6 +838,7 @@ function doAttack(fromKey,toKey,want){
   b+=rep.win
     ?'<span class="good">Victory! '+G.prov[toKey].name+' is yours.</span><br>You lost '+rep.attLost+' troops; the defenders were destroyed ('+rep.defLost+').'
     :'<span class="bad">Defeat. Your assault was broken.</span><br>You lost '+rep.attLost+' troops; survivors limped home. The enemy lost '+rep.defLost+'.';
+  saveGame();
   if(!G.over)showModal(rep.win?'Victory at '+G.prov[toKey].name:'Repelled at '+G.prov[toKey].name,b,[['Continue',closeModal,'primary']]);
 }
 
@@ -771,6 +856,7 @@ function endTurn(){
   G.targeting=false;
   renderAll();
   if(G.sel)openPanel(G.sel);
+  saveGame();
 }
 
 function showModal(title,body,btns){
@@ -790,6 +876,7 @@ function closeModal(){$('modal').style.display='none';}
 
 function gameOver(win,msg){
   G.over=true;
+  clearSave();
   log(msg,'turnmark');
   showModal(win?'THE WORLD IS YOURS':'THE CROWN IS LOST',
     msg+'<br><br>'+(win?'A golden age begins under your rule.':'History will remember your attempt.'),
@@ -831,7 +918,9 @@ function buildStart(){
     newGame(selEmpire,[...selRivals]);
     initMap();
     initInput();
+    if(window.innerWidth<761){$('mapwrap').classList.remove('tilted');$('tiltBtn').textContent='Tilt: off';}
     renderAll();
+    saveGame();
     const cap=G.prov[EMPIRES[selEmpire].cap];
     VB.w=MAPD.W/2.4;VB.h=MAPD.H/2.4;
     VB.x=cap.cx-VB.w/2;VB.y=cap.cy-VB.h/2;
@@ -852,7 +941,19 @@ function refreshStart(){
 }
 
 $('endTurn').addEventListener('click',endTurn);
+$('unitsBtn').addEventListener('click',showUnitCards);
+$('tabProv').addEventListener('click',()=>{$('side').classList.remove('mlog');document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('on',b.id==='tabProv'));});
+$('tabLog').addEventListener('click',()=>{$('side').classList.add('mlog');document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('on',b.id==='tabLog'));});
 buildStart();
+try{
+  const sv=JSON.parse(localStorage.getItem('aocsave'));
+  if(sv&&sv.prov&&!sv.over){
+    const b=$('contBtn');
+    b.style.display='inline-block';
+    b.textContent='Continue saved game — '+EMPIRES[sv.player].name+', turn '+sv.turn;
+    b.addEventListener('click',loadGame);
+  }
+}catch(e){}
 
 </script>
 </body>
