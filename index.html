@@ -75,7 +75,6 @@ h1,h2,h3{font-weight:normal}
 .pv.target{stroke:var(--gold);stroke-width:3.5;stroke-dasharray:9 6}
 .pv.pathhl{stroke:#f3ead2;stroke-width:3}
 .armyfig{cursor:pointer}
-#abar .rng{font-size:12px;color:var(--muted);align-self:center;white-space:nowrap}
 .searoute{fill:none;stroke:#5d7d8a;stroke-width:2;stroke-dasharray:7 6;opacity:.8;pointer-events:none}
 .searoute.target{stroke:var(--gold);stroke-width:3;opacity:1}
 .mt{fill:#8d7f63;opacity:.75;pointer-events:none}
@@ -110,13 +109,33 @@ h1,h2,h3{font-weight:normal}
 #impWrap{max-width:480px;margin:18px auto 0}
 #impWrap textarea{width:100%;height:60px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px;font-size:11px;font-family:monospace}
 #impMsg{color:var(--danger);font-size:13px;margin-top:4px;min-height:16px}
-#abar{display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:10px;z-index:6;background:rgba(30,24,18,.92);border:1px solid var(--gold);border-radius:10px;padding:6px 8px;gap:8px;align-items:center;max-width:96%;overflow-x:auto}
-#abar .chip{display:flex;align-items:center;gap:4px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:4px 6px;flex:none}
-#abar .cn{font-size:13px;min-width:34px;text-align:center}
-#abar .pm{display:flex;flex-direction:column;gap:2px}
-#abar .pm button{padding:0 6px;font-size:12px;line-height:16px}
-#abar .bact{display:flex;gap:6px;flex:none}
-#abar .bact button{white-space:nowrap}
+#abar{display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:10px;z-index:6;background:rgba(24,19,14,.96);border:1px solid var(--gold);border-radius:12px;padding:10px 12px;max-width:96%;width:640px;max-height:46%;overflow-y:auto}
+.dcHead{display:flex;align-items:center;gap:9px;margin-bottom:8px}
+.crest{width:22px;height:22px;border-radius:50%;border:2px solid #241d17;flex:none}
+.dcT{min-width:0;margin-right:auto}
+.dcTitle{color:var(--gold);font-size:16px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dcSub{color:var(--muted);font-size:11.5px}
+.pill{border:1px solid var(--border);border-radius:11px;padding:2px 10px;font-size:11.5px;color:var(--text);flex:none;white-space:nowrap}
+.pill.ok{border-color:#5aa858;color:#7ec97e}
+.pill.bad{border-color:var(--danger);color:var(--danger)}
+.dcBody{display:flex;gap:9px;align-items:stretch}
+.dcSum{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:7px 10px;text-align:center;flex:none;display:flex;flex-direction:column;justify-content:center;gap:1px}
+.dcSum .lb{font-size:9.5px;color:var(--muted);letter-spacing:1px}
+.dcSum .vl{font-size:16px;font-weight:bold}
+.dcSum .gold{color:var(--gold)}
+.dcTiles{display:flex;gap:7px;overflow-x:auto;flex:1;min-width:0}
+.tile{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:5px 6px 6px;flex:none;width:74px;text-align:center;position:relative}
+.tile .tn{position:absolute;top:4px;right:6px;font-size:12px;font-weight:bold}
+.rbar{height:4px;background:#3a3025;border-radius:2px;margin:3px 1px}
+.rbar div{height:4px;background:#5aa858;border-radius:2px}
+.tstep{display:flex;align-items:center;justify-content:space-between;gap:2px}
+.tstep button{padding:0 7px;font-size:13px;line-height:18px}
+.tstep span{font-size:13px;font-weight:bold;color:var(--gold)}
+.dcAct{display:flex;flex-direction:column;gap:6px;flex:none;justify-content:center}
+.dcAct>div{display:flex;gap:6px}
+.dcAct>div button{flex:1}
+.dcAct button{font-size:12.5px;padding:6px 10px;white-space:nowrap}
+@media (max-width:760px){.dcSum{display:none}#abar{width:96%}}
 .zone{cursor:pointer}
 .zc{fill:#54707c;stroke:#2c3b42;stroke-width:1.5;opacity:.92}
 .zone.zsel .zc{stroke:#fffbe8;stroke-width:3}
@@ -731,6 +750,8 @@ const ICON={
  ship:'<path d="M2 10.5 L14 10.5 L11.8 14 L4.2 14 Z" fill="currentColor"/><path d="M8 2.5 L8 10.5" stroke="currentColor" stroke-width="1.2" fill="none"/><path d="M8 2.5 Q13.5 5.5 8 9 Z" fill="currentColor"/>',
  catapult:'<circle cx="4" cy="13" r="1.4" fill="currentColor"/><circle cx="11.5" cy="13" r="1.4" fill="currentColor"/><path d="M2 11.5 L14 11.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M4.5 11 L12 3.5" stroke="currentColor" stroke-width="1.6" fill="none"/><circle cx="12.4" cy="3.2" r="1.7" fill="currentColor"/><path d="M8 11 L6.2 7.5" stroke="currentColor" stroke-width="1.2" fill="none"/>'
 };
+const ART={"spear": "<ellipse cx=\"16\" cy=\"29.6\" rx=\"8\" ry=\"1.8\" fill=\"#241d17\" opacity=\"0.18\"/>\n<path d=\"M8 29 L24.5 4.5\" stroke=\"#7a5233\" stroke-width=\"1.5\" fill=\"none\"/>\n<path d=\"M24 5.2 L27.2 1 L26.4 6.4 Z\" fill=\"#8a8a86\" stroke=\"#241d17\" stroke-width=\"0.5\"/>\n<path d=\"M13 29 L13.6 21 L12.6 15.5 Q13 13.4 16 13.2 Q19 13.4 19.4 15.5 L18.4 21 L19 29 L17 29 L16 22.5 L15 29 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<circle cx=\"16\" cy=\"10\" r=\"3\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M13.6 9.4 L18.4 9.4\" stroke=\"#241d17\" stroke-width=\"0.7\"/>\n<circle cx=\"10.6\" cy=\"19.4\" r=\"3.6\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.9\"/>\n<circle cx=\"10.6\" cy=\"19.4\" r=\"1\" fill=\"#241d17\"/>", "sword": "<ellipse cx=\"16\" cy=\"29.6\" rx=\"8\" ry=\"1.8\" fill=\"#241d17\" opacity=\"0.18\"/>\n<path d=\"M19.8 15.2 L23 15.8\" stroke=\"currentColor\" stroke-width=\"1.6\"/>\n<path d=\"M23.4 15.4 L27.6 4.6\" stroke=\"#8a8a86\" stroke-width=\"1.8\" fill=\"none\"/>\n<path d=\"M21.6 14.4 L25.4 16.2\" stroke=\"#241d17\" stroke-width=\"1.2\"/>\n<circle cx=\"23.2\" cy=\"16.4\" r=\"0.9\" fill=\"#241d17\"/>\n<path d=\"M14 29 L14.6 21 L13.6 15.5 Q14 13.4 17 13.2 Q20 13.4 20.4 15.5 L19.4 21 L20 29 L18 29 L17 22.5 L16 29 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<circle cx=\"17\" cy=\"10\" r=\"3\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M14.6 9.4 L19.4 9.4\" stroke=\"#241d17\" stroke-width=\"0.7\"/>\n<path d=\"M12.4 13.6 Q8.2 14.4 8.6 20 Q8.9 24.6 12.4 26.4 Q14.4 22.8 14.2 18.4 Q14.1 15.2 12.4 13.6 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.9\"/>\n<path d=\"M11.5 16.5 L11.5 23.5 M9.6 19.8 L13.6 19.8\" stroke=\"#241d17\" stroke-width=\"0.6\"/>", "longbow": "<ellipse cx=\"16\" cy=\"29.6\" rx=\"8\" ry=\"1.8\" fill=\"#241d17\" opacity=\"0.18\"/>\n<path d=\"M22 4 Q29.5 16 22 28\" stroke=\"#7a5233\" stroke-width=\"1.6\" fill=\"none\"/>\n<path d=\"M22 4 L22 28\" stroke=\"#241d17\" stroke-width=\"0.6\"/>\n<path d=\"M10 15.8 L24 15.8\" stroke=\"#7a5233\" stroke-width=\"1\"/>\n<path d=\"M25.8 15.8 L23 14.6 L23 17 Z\" fill=\"#8a8a86\"/>\n<path d=\"M11.5 29 L12.1 21 L11.4 15.8 Q11.8 13.6 14.6 13.4 Q17.4 13.6 17.8 15.8 L17 21 L17.6 29 L15.7 29 L14.7 22.5 L13.6 29 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<circle cx=\"14.6\" cy=\"10.2\" r=\"3\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M12.2 9.6 L17 9.6\" stroke=\"#241d17\" stroke-width=\"0.7\"/>", "crossbow": "<ellipse cx=\"17\" cy=\"29.6\" rx=\"8\" ry=\"1.8\" fill=\"#241d17\" opacity=\"0.18\"/>\n<path d=\"M15 29 L15.6 21 L14.6 15.5 Q15 13.4 18 13.2 Q21 13.4 21.4 15.5 L20.4 21 L21 29 L19 29 L18 22.5 L17 29 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<circle cx=\"18\" cy=\"10\" r=\"3\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M15.6 9.4 L20.4 9.4\" stroke=\"#241d17\" stroke-width=\"0.7\"/>\n<path d=\"M4.5 16 L17 16\" stroke=\"#7a5233\" stroke-width=\"1.9\"/>\n<path d=\"M7.6 10.4 Q3.6 16 7.6 21.6\" stroke=\"#8a8a86\" stroke-width=\"1.5\" fill=\"none\"/>\n<path d=\"M7.6 10.4 L7.6 21.6\" stroke=\"#241d17\" stroke-width=\"0.7\"/>\n<path d=\"M2.4 16 L6 14.4 L6 17.6 Z\" fill=\"#8a8a86\" stroke=\"#241d17\" stroke-width=\"0.4\"/>\n<path d=\"M14.8 16 L15.6 14.2\" stroke=\"currentColor\" stroke-width=\"1.4\"/>", "cavalry": "<ellipse cx=\"16\" cy=\"29.8\" rx=\"11\" ry=\"1.8\" fill=\"#241d17\" opacity=\"0.18\"/>\n<path d=\"M6.5 29 L7.5 23.5 L7 20 Q7.5 16.5 12 16 L21 16 Q25.5 16.5 25.5 20 L26.5 23 L27.5 29 L25.5 29 L24.5 23.5 L22.5 21.5 L21.5 29 L19.6 29 L19.2 22 L11.8 22 L10.8 29 L8.9 29 L9.5 21.5 L9 23.5 L8.4 29 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.9\"/>\n<path d=\"M24.5 17.5 L27.8 12.6 Q29.4 11.4 29.6 13.4 L29 16.2 L27 18.6 Q25.6 19.6 24.5 17.5 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M7.2 17.6 Q5 19.4 5.4 22.4\" stroke=\"#241d17\" stroke-width=\"1\" fill=\"none\"/>\n<path d=\"M13.4 15.6 L13.8 10.4 Q14.4 8.2 16.6 8.2 Q18.8 8.4 19 10.6 L18.6 15.6 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<circle cx=\"16.4\" cy=\"5.6\" r=\"2.6\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M10 13.5 L25 3.5\" stroke=\"#7a5233\" stroke-width=\"1.2\"/>\n<path d=\"M24.6 3.9 L27 1.6 L26.2 4.9 Z\" fill=\"#8a8a86\"/>", "catapult": "<ellipse cx=\"16\" cy=\"29.8\" rx=\"11\" ry=\"1.8\" fill=\"#241d17\" opacity=\"0.18\"/>\n<circle cx=\"9\" cy=\"27\" r=\"2.6\" fill=\"#7a5233\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<circle cx=\"23\" cy=\"27\" r=\"2.6\" fill=\"#7a5233\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M5.5 25 L26.5 25\" stroke=\"#7a5233\" stroke-width=\"2\"/>\n<path d=\"M10 25 L15.5 17 L21 25\" stroke=\"#7a5233\" stroke-width=\"1.6\" fill=\"none\"/>\n<path d=\"M11.5 24 L26 5.5\" stroke=\"#7a5233\" stroke-width=\"1.8\"/>\n<circle cx=\"26.6\" cy=\"4.8\" r=\"2.8\" fill=\"#8a8a86\" stroke=\"#241d17\" stroke-width=\"0.9\"/>\n<path d=\"M15.5 17 L18 20.8\" stroke=\"#241d17\" stroke-width=\"0.9\"/>", "ship": "<path d=\"M4 22.5 L28 22.5 L23.5 29 L8.5 29 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.9\"/>\n<path d=\"M6.5 24.5 L4.5 28 M11 24.5 L9.5 29.5 M16 24.5 L15.5 30 M21 24.5 L21.5 29.5 M25.5 24.5 L26.5 28\" stroke=\"#7a5233\" stroke-width=\"0.9\"/>\n<path d=\"M16 5.5 L16 22.5\" stroke=\"#7a5233\" stroke-width=\"1.3\"/>\n<path d=\"M16.8 7 Q26 12.5 16.8 19.5 Z\" fill=\"#efe6cd\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M16 5.5 L11.5 7.5 L16 9 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.6\"/>\n<path d=\"M28.5 22.5 Q30 20.5 29 18.5\" stroke=\"#7a5233\" stroke-width=\"1.1\" fill=\"none\"/>"};
+function artSvg(t,px,col){return '<svg viewBox="0 0 32 32" style="width:'+px+'px;height:'+px+'px;color:'+col+'">'+(ART[t]||ART.spear)+'</svg>';}
 function uicon(t,col){return '<svg class="uic" viewBox="0 0 16 16" style="color:'+(col||'#e8dcc8')+'">'+ICON[t]+'</svg>';}
 function mapIcon(t,x,y,col){return '<g transform="translate('+x+' '+y+') scale(0.8)" style="color:'+col+'">'+ICON[t]+'</g>';}
 function battleCard(aForce,aOwner,dForce,dOwner){
@@ -858,7 +879,7 @@ function showUnitCards(){
   let h='<div class="ucards">';
   UKEYS.forEach(t=>{
     const u=UNITS[t];
-    h+='<div class="ucard">'+uicon(t,'#c9a227')+'<h4>'+u.name+'</h4>';
+    h+='<div class="ucard">'+artSvg(t,44,'#c9a227')+'<h4>'+u.name+'</h4>';
     h+='<div class="stats">'+u.cost+' gold &middot; power '+u.pow+'</div>';
     h+='<div class="vs">Beats: '+u.beats.map(b=>uicon(b,'#5aa858')).join('')+'</div>';
     h+='<div class="vs">Beaten by: '+UKEYS.filter(e=>UNITS[e].beats.includes(t)).map(b=>uicon(b,'#c94040')).join('')+'</div>';
@@ -922,12 +943,22 @@ function updateMap(){
     const tot=cnt(p.army);
     if(tot>0){
       const dt=domType(p.army);
-      const ax=p.cx+16,ay=p.cy+9;
+      const ax=p.cx+19,ay=p.cy+2;
       ph+='<g class="armyfig" data-k="'+p.key+'">';
-      ph+='<circle cx="'+ax+'" cy="'+ay+'" r="11.5" fill="'+col+'" stroke="#241d17" stroke-width="1.5"/>';
-      ph+='<g transform="translate('+(ax-8)+' '+(ay-8)+')" style="color:#f5edd8">'+ICON[dt]+'</g>';
-      ph+='<text x="'+(ax+11)+'" y="'+(ay+14)+'" font-size="11" font-weight="bold" fill="#fff" style="paint-order:stroke;stroke:#241d17;stroke-width:2.5px">'+tot+'</text>';
-      if(windedFrac(p)>0)ph+='<text x="'+(ax-16)+'" y="'+(ay+14)+'" font-size="10" fill="#c94040" style="paint-order:stroke;stroke:#241d17;stroke-width:2px">~</text>';
+      if(G.sel===p.key){
+        ph+='<circle cx="'+ax+'" cy="'+ay+'" r="23" fill="#c9a227" opacity="0.14"/>';
+        ph+='<circle cx="'+ax+'" cy="'+ay+'" r="23" fill="none" stroke="#fffbe8" stroke-width="2" stroke-dasharray="6 4"/>';
+      }
+      ph+='<g transform="translate('+(ax-13)+' '+(ay-14)+') scale(0.85)" style="color:'+col+'">'+ART[dt]+'</g>';
+      const types=UKEYS.filter(t=>p.army[t]);
+      let chy=ay-Math.min(types.length,6)*6;
+      types.slice(0,6).forEach(t=>{
+        ph+='<rect x="'+(ax+13)+'" y="'+chy+'" width="25" height="11" rx="3" fill="'+col+'" stroke="#241d17" stroke-width="0.8"/>';
+        ph+='<g transform="translate('+(ax+14)+' '+(chy+0.5)+') scale(0.62)" style="color:#f5edd8">'+ICON[t]+'</g>';
+        ph+='<text x="'+(ax+36)+'" y="'+(chy+8.6)+'" font-size="8" font-weight="bold" fill="#fff" text-anchor="end" style="paint-order:stroke;stroke:#241d17;stroke-width:1.6px">'+p.army[t]+'</text>';
+        chy+=12;
+      });
+      if(windedFrac(p)>0)ph+='<text x="'+(ax-20)+'" y="'+(ay+16)+'" font-size="11" font-weight="bold" fill="#c94040" style="paint-order:stroke;stroke:#241d17;stroke-width:2px">~</text>';
       ph+='</g>';
     }
     if(G.rally===p.key){
@@ -1162,21 +1193,44 @@ function renderBar(){
   if(!G||!G.sel||G.over){bar.style.display='none';return;}
   const p=G.prov[G.sel];
   if(!p||p.owner!==G.player){bar.style.display='none';return;}
-  const av=availArmy(p);
-  if(!cnt(av)){bar.style.display='none';return;}
+  const tot=cnt(p.army);
+  if(!tot){bar.style.display='none';return;}
   if(!G.send)G.send={};
-  let h='';
-  UKEYS.forEach(t=>{
+  const col=empColor(G.player);
+  const av=availArmy(p);
+  const avTot=cnt(av);
+  const wsel={};UKEYS.forEach(t=>{
     const n=av[t]||0;
-    if(!n)return;
-    if(G.send[t]===undefined||G.send[t]>n)G.send[t]=n;
-    h+='<div class="chip">'+uicon(t,'#e8dcc8')+'<span class="cn">'+G.send[t]+'/'+n+'</span><span class="pm"><button onclick="bumpSend(\''+t+'\',-1)">&minus;</button><button onclick="bumpSend(\''+t+'\',1)">+</button></span></div>';
+    if(n&&(G.send[t]===undefined||G.send[t]>n))G.send[t]=n;
+    wsel[t]=Math.max(0,Math.min((G.send[t]||0),n));
   });
-  const wsel={};UKEYS.forEach(t=>{wsel[t]=Math.max(0,Math.min((G.send[t]||0),avail(p,t)));});
-  const rng=forceRange(p,wsel);
-  h+='<div class="bact"><span class="rng">Range '+(rng+(G.forced?1:0))+'</span><button onclick="setSendAll(1)">All</button><button onclick="setSendAll(0)">None</button><button '+(G.forced?'class="primary"':'')+' onclick="toggleForced()" title="March 1 extra province; arrive winded (-20% until next turn)">Forced</button><button class="primary" onclick="startTargeting()">'+(G.targeting?'Click a target...':'Choose target')+'</button></div>';
+  const sending=cnt(wsel);
+  const rng=forceRange(p,wsel)+(G.forced?1:0);
+  const wf=windedFrac(p);
+  const status=wf>0?'Winded':(avTot===0?'Moved':(avTot<tot?'Partly moved':'Ready'));
+  const stCls=status==='Ready'?'ok':(status==='Winded'?'bad':'');
+  const str=Math.round(strength(p.army,{},false,false));
+  let h='<div class="dcHead"><span class="crest" style="background:'+col+'"></span>';
+  h+='<div class="dcT"><div class="dcTitle">Army of '+p.name+'</div><div class="dcSub">'+empName(G.player)+' &middot; '+tot+' troops</div></div>';
+  h+='<span class="pill '+stCls+'">'+status+'</span><span class="pill">Range '+rng+'</span></div>';
+  h+='<div class="dcBody">';
+  h+='<div class="dcSum"><div class="lb">TROOPS</div><div class="vl">'+tot+'</div><div class="lb">STRENGTH</div><div class="vl">~'+str+'</div><div class="lb">SENDING</div><div class="vl gold">'+sending+'/'+avTot+'</div></div>';
+  h+='<div class="dcTiles">';
+  UKEYS.forEach(t=>{
+    const n=p.army[t]||0;
+    if(!n)return;
+    const rd=av[t]||0;
+    h+='<div class="tile">'+artSvg(t,42,col)+'<span class="tn">x'+n+'</span>';
+    h+='<div class="rbar"><div style="width:'+Math.round(rd/n*100)+'%"></div></div>';
+    h+='<div class="tstep"><button onclick="bumpSend(\''+t+'\',-1)">&minus;</button><span>'+wsel[t]+'</span><button onclick="bumpSend(\''+t+'\',1)">+</button></div></div>';
+  });
+  h+='</div>';
+  h+='<div class="dcAct"><div><button onclick="setSendAll(1)">All</button><button onclick="setSendAll(0)">None</button></div>';
+  h+='<button '+(G.forced?'class="primary"':'')+' onclick="toggleForced()" title="+1 province, arrive winded (-20% until next turn)">Forced march</button>';
+  h+='<button class="primary" onclick="startTargeting()">'+(G.targeting?'Click a target...':'Choose target')+'</button></div>';
+  h+='</div>';
   bar.innerHTML=h;
-  bar.style.display='flex';
+  bar.style.display='block';
 }
 function bumpSend(t,d){
   const p=G.prov[G.sel];
