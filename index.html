@@ -73,6 +73,9 @@ h1,h2,h3{font-weight:normal}
 .pv{stroke:var(--ink);stroke-width:1.2;cursor:pointer}
 .pv.sel{stroke:#fffbe8;stroke-width:3}
 .pv.target{stroke:var(--gold);stroke-width:3.5;stroke-dasharray:9 6}
+.pv.pathhl{stroke:#f3ead2;stroke-width:3}
+.armyfig{cursor:pointer}
+#abar .rng{font-size:12px;color:var(--muted);align-self:center;white-space:nowrap}
 .searoute{fill:none;stroke:#5d7d8a;stroke-width:2;stroke-dasharray:7 6;opacity:.8;pointer-events:none}
 .searoute.target{stroke:var(--gold);stroke-width:3;opacity:1}
 .mt{fill:#8d7f63;opacity:.75;pointer-events:none}
@@ -182,7 +185,7 @@ h1,h2,h3{font-weight:normal}
     </div>
     <div id="side">
       <div id="mtabs"><button id="tabProv" class="on">Province</button><button id="tabLog">Chronicle</button></div>
-      <div id="help"><b>How to play:</b> click one of your provinces, buy units, compose your force in the bar under the map, press <b>Choose target</b>, then click a highlighted province. Ship icons on the water are seas: build War Galleys from coastal provinces, and while your fleet holds a sea (and no enemy fleet is there) your armies can cross between its coasts. New recruits and ships act next turn. Cavalry acts twice each turn.</div>
+      <div id="help"><b>How to play:</b> tap an army figure, compose your force in the bar, press <b>Choose target</b>, then click a highlighted province &mdash; hover to preview the path. Armies march through your own land (foot 1 province, cavalry 2); entering enemy land ends the march in battle. <b>Forced</b> adds +1 province but troops arrive winded (&minus;20% until next turn). Set a <b>rally point</b> and new recruits march there on their own. Seas: build War Galleys from coasts; holding a sea uncontested lets armies cross it.</div>
       <div id="panel"><div class="meta">Click a province to inspect it.</div></div>
       <div id="logwrap"><h3>Chronicle</h3><div id="log"></div></div>
     </div>
@@ -250,10 +253,12 @@ function blend(h1,h2,t){
   return '#'+((1<<24)+(r<<16)+(g<<8)+bl).toString(16).slice(1);
 }
 
+const SPD={spear:1,sword:1,longbow:1,crossbow:1,cavalry:2,catapult:1};
+
 let G=null;
 
 function newGame(playerKey,rivalKeys,diff){
-  G={turn:1,player:playerKey,emp:{},prov:{},log:[],sel:null,targeting:false,over:false,diff:diff||'norm'};
+  G={turn:1,player:playerKey,emp:{},prov:{},log:[],sel:null,targeting:false,over:false,diff:diff||'norm',rally:null,forced:false};
   const persPool=['agg','bld','opp'];
   const players=[playerKey,...rivalKeys];
   players.forEach(k=>{
@@ -261,7 +266,7 @@ function newGame(playerKey,rivalKeys,diff){
   });
   for(const key in MAPD.prov){
     const m=MAPD.prov[key];
-    const pr={key,name:m.name,city:m.city,cx:m.cx,cy:m.cy,inc:m.inc,capOf:CAPOF[key]||null,owner:'neutral',army:{},moved:{},cavHalf:0,adj:[]};
+    const pr={key,name:m.name,city:m.city,cx:m.cx,cy:m.cy,inc:m.inc,capOf:CAPOF[key]||null,owner:'neutral',army:{},moved:{},cavHalf:0,winded:{},rallyq:{},adj:[]};
     if(pr.capOf&&players.includes(pr.capOf)){
       pr.owner=pr.capOf;
       pr.army={spear:4,sword:2,longbow:2,crossbow:0,cavalry:2,catapult:0};
@@ -336,11 +341,11 @@ function volley(shooter,target){
   return kills;
 }
 
-function oddsOf(att,defProv){
+function oddsOf(att,defProv,aw){
   const def=defProv.army;
   if(cnt(def)===0)return 1;
-  const Sa=strength(att,def,false,false);
-  const Sd=strength(def,att,true,!!defProv.capOf);
+  const Sa=strength(att,def,false,false)*(1-0.2*(aw||0));
+  const Sd=strength(def,att,true,!!defProv.capOf)*(1-0.2*windedFrac(defProv));
   return Math.pow(Sa,3)/(Math.pow(Sa,3)+Math.pow(Sd,3));
 }
 function oddsLabel(p){
@@ -370,8 +375,9 @@ function battle(fromKey,toKey,force,attackerKey){
     rep.win=false;rep.attLost=attStart;rep.defLost=defStart-cnt(def);
     return rep;
   }
-  const Sa=strength(att,def,false,false)*rand(0.85,1.15);
-  const Sd=strength(def,att,true,!!to.capOf)*rand(0.85,1.15);
+  const awf=(arguments.length>4&&arguments[4]&&arguments[4].aw)?arguments[4].aw:0;
+  const Sa=strength(att,def,false,false)*rand(0.85,1.15)*(1-0.2*awf);
+  const Sd=strength(def,att,true,!!to.capOf)*rand(0.85,1.15)*(1-0.2*windedFrac(to));
   if(Sa>Sd){
     const lossN=Math.min(Math.round(cnt(att)*0.55*Sd/Sa),cnt(att)-1);
     removeUnits(att,lossN);
@@ -395,7 +401,7 @@ function battle(fromKey,toKey,force,attackerKey){
 function conquer(to,newOwner,army){
   const old=to.owner;
   to.owner=newOwner;
-  to.army={};to.moved={};
+  to.army={};to.moved={};to.winded={};to.rallyq={};
   for(const t in army){ if(army[t]){to.army[t]=army[t];to.moved[t]=army[t];} }
   to.cavHalf=0;
   if(old!=='neutral'&&G.emp[old])checkElim(old);
@@ -424,6 +430,7 @@ function buyUnit(provKey,t){
   e.gold-=UNITS[t].cost;
   p.army[t]=(p.army[t]||0)+1;
   p.moved[t]=(p.moved[t]||0)+1;
+  if(G.rally&&provKey!==G.rally){p.rallyq=p.rallyq||{};p.rallyq[t]=(p.rallyq[t]||0)+1;}
   renderAll();
   openPanel(provKey);
 }
@@ -446,12 +453,14 @@ function takeForce(p,want,forMove){
   return {force,freshCav};
 }
 
-function moveFriendly(fromKey,toKey,force,freshCav){
+function moveFriendly(fromKey,toKey,force,freshCav,cost,forced){
   const to=G.prov[toKey];
-  if(G.animQ)G.animQ.push({from:fromKey,to:toKey,e:to.owner,t:domType(force)});
+  cost=cost||1;
+  if(G.animQ&&cost===1)G.animQ.push({from:fromKey,to:toKey,e:to.owner,t:domType(force)});
   for(const t in force){
     to.army[t]=(to.army[t]||0)+force[t];
-    if(t==='cavalry'){
+    if(forced){to.winded=to.winded||{};to.winded[t]=(to.winded[t]||0)+force[t];}
+    if(t==='cavalry'&&cost===1&&!forced){
       const fc=Math.min(freshCav||0,force[t]);
       const ex=force[t]-fc;
       to.cavHalf=(to.cavHalf||0)+fc;
@@ -508,6 +517,93 @@ function navalBattle(z,att,def){
   return rep;
 }
 
+function forceRange(p,force){
+  let r=Infinity;
+  for(const t in force){
+    if(!force[t])continue;
+    let mp=SPD[t]||1;
+    if(t==='cavalry'){
+      const halfAvail=p.cavHalf||0;
+      const fresh=Math.max(0,(p.army.cavalry||0)-((p.moved.cavalry)||0)-halfAvail);
+      if(force[t]>fresh)mp=1;
+    }
+    r=Math.min(r,mp);
+  }
+  return r===Infinity?0:r;
+}
+function marchMap(fromKey,e,range){
+  const dist={};dist[fromKey]=0;
+  const parent={};
+  const q=[fromKey];
+  while(q.length){
+    const cur=q.shift();
+    const d=dist[cur];
+    if(d>=range)continue;
+    for(const nk of G.prov[cur].adj){
+      if(nk in dist)continue;
+      dist[nk]=d+1;parent[nk]=cur;
+      if(G.prov[nk].owner===e)q.push(nk);
+    }
+  }
+  return {dist,parent};
+}
+function marchPath(fromKey,toKey,parent){
+  const path=[toKey];
+  let c=toKey,guard=0;
+  while(c!==fromKey&&guard++<60){c=parent[c];path.unshift(c);}
+  return path;
+}
+function marchTargets(p,force,forced){
+  const range=forceRange(p,force)+(forced?1:0);
+  const mm=marchMap(p.key,G.player,range);
+  const targets={};
+  for(const k in mm.dist){
+    if(k===p.key)continue;
+    targets[k]={d:mm.dist[k]};
+  }
+  seaNeighbors(p,G.player).forEach(k=>{if(!targets[k])targets[k]={d:1,sea:true};});
+  return {targets,parent:mm.parent,range};
+}
+function windedFrac(p){
+  const w=cnt(p.winded||{});
+  if(!w)return 0;
+  return Math.min(1,w/Math.max(1,cnt(p.army)));
+}
+function clearWinded(ownerKey){
+  Object.values(G.prov).forEach(p=>{if(p.owner===ownerKey)p.winded={};});
+}
+function processRallyMoves(){
+  if(!G.rally||G.prov[G.rally].owner!==G.player){G.rally=null;return;}
+  const pending=[];
+  for(const p of provsOf(G.player)){
+    if(!p.rallyq||!cnt(p.rallyq)||p.key===G.rally)continue;
+    const mm=marchMap(p.key,G.player,99);
+    if(!(G.rally in mm.dist)){p.rallyq={};continue;}
+    const path=marchPath(p.key,G.rally,mm.parent);
+    const step=path[1];
+    if(!step||G.prov[step].owner!==G.player){p.rallyq={};continue;}
+    const moving={};
+    for(const t in p.rallyq){
+      const n=Math.min(p.rallyq[t],p.army[t]||0);
+      if(n>0)moving[t]=n;
+    }
+    p.rallyq={};
+    if(cnt(moving))pending.push({from:p.key,to:step,moving});
+  }
+  pending.forEach(mv=>{
+    const from=G.prov[mv.from],to=G.prov[mv.to];
+    for(const t in mv.moving){
+      const n=mv.moving[t];
+      from.army[t]=(from.army[t]||0)-n;
+      if(from.army[t]<=0)delete from.army[t];
+      to.army[t]=(to.army[t]||0)+n;
+      to.moved[t]=(to.moved[t]||0)+n;
+      if(mv.to!==G.rally){to.rallyq=to.rallyq||{};to.rallyq[t]=(to.rallyq[t]||0)+n;}
+    }
+    if(G.animQ)G.animQ.push({from:mv.from,to:mv.to,e:G.player,t:domType(mv.moving)});
+  });
+}
+
 const PERS={
  agg:{thr:1.12,reserve:10,mix:{cavalry:3,sword:3,spear:2,crossbow:1,longbow:1,catapult:1}},
  bld:{thr:1.45,reserve:30,mix:{spear:2,sword:2,longbow:2,crossbow:2,cavalry:1,catapult:2}},
@@ -533,6 +629,7 @@ function aiTurn(k){
   if(!e.alive||G.over)return;
   const P=PERS[e.pers];
   const D=DIFFS[G.diff||'norm'];
+  clearWinded(k);
   e.gold+=Math.round(incomeOf(k)*D.inc);
   let spots=frontierOf(k);
   if(!spots.length)spots=provsOf(k);
@@ -735,6 +832,9 @@ function loadGame(){
   G.animQ=[];
   G.selZone=null;G.zoneTargeting=false;G.send={};
   if(!G.diff)G.diff='norm';
+  if(G.rally===undefined)G.rally=null;
+  G.forced=false;G.marchInfo=null;
+  Object.values(G.prov).forEach(p=>{if(!p.winded)p.winded={};if(!p.rallyq)p.rallyq={};});
   if(!G.fleets){
     G.fleets={};G.fmoved={};
     for(const z in ZONES){G.fleets[z]={};G.fmoved[z]={};}
@@ -805,7 +905,7 @@ function zoomBy(f){
 
 function updateMap(){
   const svg=$('map');
-  const targets=G.targeting&&G.sel?reachable(G.prov[G.sel],G.player):[];
+  const targets=(G.targeting&&G.sel&&G.marchInfo)?Object.keys(G.marchInfo.targets):[];
   svg.querySelectorAll('#gProv path').forEach(el=>{
     const k=el.getAttribute('data-k'),p=G.prov[k];
     el.setAttribute('fill',p.owner==='neutral'?PARCH:blend(PARCH,empColor(p.owner),0.5));
@@ -818,15 +918,21 @@ function updateMap(){
     ph+='<g class="pin" data-k="'+p.key+'">';
     ph+='<circle cx="'+p.cx+'" cy="'+p.cy+'" r="6" fill="'+col+'" data-k="'+p.key+'"/>';
     if(p.capOf)ph+='<text class="cap" x="'+p.cx+'" y="'+(p.cy-11)+'">&#9733;</text>';
-    ph+='<text class="lbl" x="'+p.cx+'" y="'+(p.cy+20)+'">'+p.city+'('+cnt(p.army)+')</text>';
+    ph+='<text class="lbl" x="'+p.cx+'" y="'+(p.cy+20)+'">'+p.city+'</text>';
     const tot=cnt(p.army);
     if(tot>0){
       const dt=domType(p.army);
-      const w=17+String(tot).length*7+8;
-      const bx=p.cx+9,by=p.cy-23;
-      ph+='<rect x="'+bx+'" y="'+by+'" width="'+w+'" height="17" rx="4" fill="'+col+'" stroke="#241d17" stroke-width="1"/>';
-      ph+=mapIcon(dt,bx+2,by+2,'#f5edd8');
-      ph+='<text x="'+(bx+w-4)+'" y="'+(by+13)+'" text-anchor="end" font-size="11" font-weight="bold" fill="#fff" style="paint-order:stroke;stroke:#241d17;stroke-width:2px">'+tot+'</text>';
+      const ax=p.cx+16,ay=p.cy+9;
+      ph+='<g class="armyfig" data-k="'+p.key+'">';
+      ph+='<circle cx="'+ax+'" cy="'+ay+'" r="11.5" fill="'+col+'" stroke="#241d17" stroke-width="1.5"/>';
+      ph+='<g transform="translate('+(ax-8)+' '+(ay-8)+')" style="color:#f5edd8">'+ICON[dt]+'</g>';
+      ph+='<text x="'+(ax+11)+'" y="'+(ay+14)+'" font-size="11" font-weight="bold" fill="#fff" style="paint-order:stroke;stroke:#241d17;stroke-width:2.5px">'+tot+'</text>';
+      if(windedFrac(p)>0)ph+='<text x="'+(ax-16)+'" y="'+(ay+14)+'" font-size="10" fill="#c94040" style="paint-order:stroke;stroke:#241d17;stroke-width:2px">~</text>';
+      ph+='</g>';
+    }
+    if(G.rally===p.key){
+      ph+='<path d="M'+(p.cx-17)+' '+(p.cy-6)+' L'+(p.cx-17)+' '+(p.cy-26)+'" stroke="#241d17" stroke-width="1.6"/>';
+      ph+='<path d="M'+(p.cx-17)+' '+(p.cy-26)+' L'+(p.cx-4)+' '+(p.cy-21)+' L'+(p.cx-17)+' '+(p.cy-16)+' Z" fill="#c9a227" stroke="#241d17" stroke-width="0.8"/>';
     }
     ph+='</g>';
   });
@@ -905,6 +1011,18 @@ function initInput(){
   };
   svg.addEventListener('pointerup',up);
   svg.addEventListener('pointercancel',up);
+  svg.addEventListener('pointerover',e=>{
+    if(!G||!G.targeting||!G.marchInfo)return;
+    const t=e.target.closest?e.target.closest('[data-k]'):null;
+    const k=t?t.getAttribute('data-k'):null;
+    let hl=[];
+    if(k&&G.marchInfo.targets[k]&&!G.marchInfo.targets[k].sea){
+      hl=marchPath(G.sel,k,G.marchInfo.parent);
+    }
+    svg.querySelectorAll('#gProv path').forEach(el=>{
+      el.classList.toggle('pathhl',hl.includes(el.getAttribute('data-k')));
+    });
+  });
   svg.addEventListener('wheel',e=>{
     e.preventDefault();
     zoomBy(e.deltaY>0?1.18:1/1.18);
@@ -933,27 +1051,47 @@ function renderAll(){updateMap();renderHdr();}
 function provClick(k){
   if(G.over)return;
   const p=G.prov[k];
-  if(G.targeting&&G.sel&&reachable(G.prov[G.sel],G.player).includes(k)){
+  if(G.targeting&&G.sel&&G.marchInfo&&G.marchInfo.targets[k]){
     const from=G.prov[G.sel];
+    const info=G.marchInfo.targets[k];
     const want={};
     UKEYS.forEach(t=>{want[t]=Math.max(0,Math.min((G.send&&G.send[t])||0,avail(from,t)));});
-    if(cnt(want)===0){G.targeting=false;renderAll();openPanel(G.sel);return;}
+    if(cnt(want)===0){G.targeting=false;G.marchInfo=null;renderAll();openPanel(G.sel);return;}
+    const baseRange=forceRange(from,want);
+    const forced=!!G.forced&&info.d>baseRange;
     if(p.owner===G.player){
+      const path=info.sea?[G.sel,k]:marchPath(G.sel,k,G.marchInfo.parent);
       const r=takeForce(from,want,true);
-      moveFriendly(G.sel,k,r.force,r.freshCav);
-      log('You marched '+cnt(r.force)+' troops from '+from.name+' to '+p.name+'.');
-      G.targeting=false;
+      if(G.animQ&&(info.d>1||info.sea===undefined&&path.length>2)){}
+      if(info.d>1){
+        for(let i=0;i<path.length-1;i++)G.animQ.push({from:path[i],to:path[i+1],e:G.player,t:domType(r.force)});
+      }
+      moveFriendly(G.sel,k,r.force,r.freshCav,info.d,forced);
+      log('You marched '+cnt(r.force)+' troops from '+from.name+' to '+p.name+(forced?' (forced march — they arrive winded).':'.'));
+      G.targeting=false;G.marchInfo=null;
       playAnims(()=>{renderAll();openPanel(k);saveGame();});
     }else{
-      confirmAttack(G.sel,k,want);
+      confirmAttack(G.sel,k,want,forced);
     }
     return;
   }
-  G.targeting=false;G.zoneTargeting=false;G.selZone=null;
-  if(G.sel!==k)G.send={};
+  G.targeting=false;G.zoneTargeting=false;G.selZone=null;G.marchInfo=null;
+  if(G.sel!==k){G.send={};G.forced=false;}
   G.sel=k;
   renderAll();
   openPanel(k);
+}
+function toggleForced(){
+  G.forced=!G.forced;
+  if(G.targeting)computeMarch();
+  renderAll();
+}
+function computeMarch(){
+  if(!G.sel)return;
+  const from=G.prov[G.sel];
+  const want={};
+  UKEYS.forEach(t=>{want[t]=Math.max(0,Math.min((G.send&&G.send[t])||0,avail(from,t)));});
+  G.marchInfo=cnt(want)?marchTargets(from,want,!!G.forced):null;
 }
 function zoneClick(z){
   if(G.over)return;
@@ -1034,18 +1172,22 @@ function renderBar(){
     if(G.send[t]===undefined||G.send[t]>n)G.send[t]=n;
     h+='<div class="chip">'+uicon(t,'#e8dcc8')+'<span class="cn">'+G.send[t]+'/'+n+'</span><span class="pm"><button onclick="bumpSend(\''+t+'\',-1)">&minus;</button><button onclick="bumpSend(\''+t+'\',1)">+</button></span></div>';
   });
-  h+='<div class="bact"><button onclick="setSendAll(1)">All</button><button onclick="setSendAll(0)">None</button><button class="primary" onclick="startTargeting()">'+(G.targeting?'Click a target...':'Choose target')+'</button></div>';
+  const wsel={};UKEYS.forEach(t=>{wsel[t]=Math.max(0,Math.min((G.send[t]||0),avail(p,t)));});
+  const rng=forceRange(p,wsel);
+  h+='<div class="bact"><span class="rng">Range '+(rng+(G.forced?1:0))+'</span><button onclick="setSendAll(1)">All</button><button onclick="setSendAll(0)">None</button><button '+(G.forced?'class="primary"':'')+' onclick="toggleForced()" title="March 1 extra province; arrive winded (-20% until next turn)">Forced</button><button class="primary" onclick="startTargeting()">'+(G.targeting?'Click a target...':'Choose target')+'</button></div>';
   bar.innerHTML=h;
   bar.style.display='flex';
 }
 function bumpSend(t,d){
   const p=G.prov[G.sel];
   G.send[t]=Math.max(0,Math.min(avail(p,t),(G.send[t]||0)+d));
+  if(G.targeting){computeMarch();updateMap();}
   renderBar();
 }
 function setSendAll(on){
   const p=G.prov[G.sel];
   UKEYS.forEach(t=>{G.send[t]=on?avail(p,t):0;});
+  if(G.targeting){computeMarch();updateMap();}
   renderBar();
 }
 
@@ -1069,6 +1211,9 @@ function openPanel(k){
     (COASTZ[k]||[]).forEach(z=>{
       h+='<div class="buildrow"><span>'+uicon('ship')+SHIP.name+' &rarr; '+ZONES[z].name+' &mdash; '+SHIP.cost+'g</span><button '+(e.gold<SHIP.cost?'disabled':'')+' onclick="buyGalley(\''+k+'\',\''+z+'\')">Buy</button></div>';
     });
+    h+=G.rally===k
+      ?'<button style="width:100%;margin-top:6px" onclick="clearRally()">&#9873; Rally point here — clear</button>'
+      :'<button style="width:100%;margin-top:6px" onclick="setRally(\''+k+'\')">&#9873; Set rally point (new recruits march here)</button>';
     const av=availArmy(p);
     if(cnt(av)>0){
       h+='<div class="meta" style="margin-top:8px">Compose your force in the bar under the map, then press Choose target.</div>';
@@ -1084,31 +1229,33 @@ function openPanel(k){
 
 function startTargeting(){
   G.targeting=true;
+  computeMarch();
   updateMap();
   openPanel(G.sel);
 }
 
-function confirmAttack(fromKey,toKey,want){
+function confirmAttack(fromKey,toKey,want,forced){
   const to=G.prov[toKey];
   const force={};
   for(const t in want)if(want[t])force[t]=want[t];
-  const p=oddsOf(force,to);
+  const p=oddsOf(force,to,forced?1:0);
   const pct=Math.round(p*100);
   showModal('Attack '+to.name+'?',
     battleCard(force,G.player,to.army,to.owner)+
+    (forced?'<div class="meta" style="text-align:center">Forced march: your troops fight winded (&minus;20% strength).</div>':'')+
     '<div style="text-align:center;margin-top:4px">Estimated odds: <b>'+pct+'%</b> &mdash; '+oddsLabel(p)+'</div>',
-    [['Attack!',()=>{closeModal();doAttack(fromKey,toKey,want);},'primary'],['Cancel',()=>{closeModal();},'']]);
+    [['Attack!',()=>{closeModal();doAttack(fromKey,toKey,want,forced);},'primary'],['Cancel',()=>{closeModal();},'']]);
 }
 
-function doAttack(fromKey,toKey,want){
+function doAttack(fromKey,toKey,want,forced){
   const from=G.prov[fromKey];
   const r=takeForce(from,want,false);
   const snapA=JSON.parse(JSON.stringify(r.force));
   const snapD=JSON.parse(JSON.stringify(G.prov[toKey].army));
   const snapOwner=G.prov[toKey].owner;
-  const rep=battle(fromKey,toKey,r.force,G.player);
+  const rep=battle(fromKey,toKey,r.force,G.player,{aw:forced?1:0});
   logBattle(rep);
-  G.targeting=false;
+  G.targeting=false;G.marchInfo=null;
   G.sel=rep.win?toKey:fromKey;
   G.send={};
   playAnims(()=>{renderAll();openPanel(G.sel);});
@@ -1122,6 +1269,8 @@ function doAttack(fromKey,toKey,want){
   if(!G.over)showModal(rep.win?'Victory at '+G.prov[toKey].name:'Repelled at '+G.prov[toKey].name,b,[['Continue',closeModal,'primary']]);
 }
 
+function setRally(k){G.rally=k;renderAll();openPanel(k);}
+function clearRally(){const k=G.rally;G.rally=null;renderAll();if(k)openPanel(k);}
 function endTurn(){
   if(G.over)return;
   $('endTurn').disabled=true;
@@ -1132,14 +1281,19 @@ function endTurn(){
       G.turn++;
       Object.values(G.prov).forEach(p=>{p.moved={};p.cavHalf=0;});
       for(const z in ZONES)G.fmoved[z]={};
+      clearWinded(G.player);
+      G.animQ=[];
+      processRallyMoves();
       G.emp[G.player].gold+=incomeOf(G.player);
       log('Turn '+G.turn+' — your coffers grow by '+incomeOf(G.player)+' gold.','turnmark');
     }
-    $('endTurn').disabled=false;
-    G.targeting=false;
-    renderAll();
-    if(G.sel)openPanel(G.sel);
-    saveGame();
+    playAnims(()=>{
+      $('endTurn').disabled=false;
+      G.targeting=false;G.marchInfo=null;
+      renderAll();
+      if(G.sel)openPanel(G.sel);
+      saveGame();
+    });
   });
 }
 
