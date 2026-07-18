@@ -146,6 +146,8 @@ h1,h2,h3{font-weight:normal}
     <div class="empgrid" id="empgrid"></div>
     <h2>Choose your rivals (2 to 5)</h2>
     <div class="rivalrow" id="rivalrow"></div>
+    <h2>Choose difficulty</h2>
+    <div class="rivalrow" id="diffrow"></div>
     <button id="startBtn" class="primary">Begin the conquest</button>
     <div><button id="contBtn">Continue saved game</button></div>
     <div id="impWrap"><textarea id="impT" placeholder="Paste a save code from another device..."></textarea><button id="impBtn">Import save code</button><div id="impMsg"></div></div>
@@ -226,6 +228,11 @@ const ZONES={
 };
 const COASTZ={};
 for(const z in ZONES)ZONES[z].coasts.forEach(p=>{(COASTZ[p]=COASTZ[p]||[]).push(z);});
+const DIFFS={
+ easy:{name:'Easy',thr:0.35,res:25,spend:0.55,grace:6,inc:1.0},
+ norm:{name:'Normal',thr:0.12,res:10,spend:0.85,grace:2,inc:1.0},
+ hard:{name:'Hard',thr:0,res:0,spend:1.0,grace:0,inc:1.15}
+};
 const CAPOF={};
 for(const k in EMPIRES) CAPOF[EMPIRES[k].cap]=k;
 const NEED=24;
@@ -245,8 +252,8 @@ function blend(h1,h2,t){
 
 let G=null;
 
-function newGame(playerKey,rivalKeys){
-  G={turn:1,player:playerKey,emp:{},prov:{},log:[],sel:null,targeting:false,over:false};
+function newGame(playerKey,rivalKeys,diff){
+  G={turn:1,player:playerKey,emp:{},prov:{},log:[],sel:null,targeting:false,over:false,diff:diff||'norm'};
   const persPool=['agg','bld','opp'];
   const players=[playerKey,...rivalKeys];
   players.forEach(k=>{
@@ -525,15 +532,19 @@ function aiTurn(k){
   const e=G.emp[k];
   if(!e.alive||G.over)return;
   const P=PERS[e.pers];
-  e.gold+=incomeOf(k);
+  const D=DIFFS[G.diff||'norm'];
+  e.gold+=Math.round(incomeOf(k)*D.inc);
   let spots=frontierOf(k);
   if(!spots.length)spots=provsOf(k);
+  const reserve=P.reserve+D.res;
+  let budget=Math.max(0,Math.round((e.gold-reserve)*D.spend));
   let guard=0;
-  while(e.gold>P.reserve+9&&spots.length&&guard++<60){
-    const t=pickWeighted(P.mix,e.gold-P.reserve);
+  while(budget>=10&&e.gold>=10&&spots.length&&guard++<60){
+    const t=pickWeighted(P.mix,Math.min(budget,e.gold));
     if(!t)break;
     const p=pick(spots);
     e.gold-=UNITS[t].cost;
+    budget-=UNITS[t].cost;
     p.army[t]=(p.army[t]||0)+1;
     p.moved[t]=(p.moved[t]||0)+1;
   }
@@ -570,8 +581,11 @@ function aiTurn(k){
       const ratio=Sa/Sd;
       let score=ratio;
       if(e.pers==='opp')score=ratio+(2-Math.min(2,cnt(n.army)/4));
-      if(n.owner===G.player)score+=0.15;
-      if(ratio>P.thr&&(!best||score>best.score))best={nk,score};
+      if(n.owner===G.player){
+        if(G.turn<=DIFFS[G.diff||'norm'].grace)continue;
+        score+=0.15;
+      }
+      if(ratio>P.thr+DIFFS[G.diff||'norm'].thr&&(!best||score>best.score))best={nk,score};
     }
     if(best){
       const r=takeForce(p,force,false);
@@ -720,6 +734,7 @@ function loadGame(){
   G=d;
   G.animQ=[];
   G.selZone=null;G.zoneTargeting=false;G.send={};
+  if(!G.diff)G.diff='norm';
   if(!G.fleets){
     G.fleets={};G.fmoved={};
     for(const z in ZONES){G.fleets[z]={};G.fmoved[z]={};}
@@ -1153,6 +1168,7 @@ function gameOver(win,msg){
 }
 
 let selEmpire=null;
+let selDiff='norm';
 const selRivals=new Set();
 function buildStart(){
   const grid=$('empgrid');
@@ -1179,12 +1195,21 @@ function buildStart(){
     };
     row.appendChild(d);
   });
+  const drow=$('diffrow');
+  drow.innerHTML='';
+  Object.keys(DIFFS).forEach(d=>{
+    const el=document.createElement('div');
+    el.className='rival';el.dataset.d=d;
+    el.textContent=DIFFS[d].name;
+    el.onclick=()=>{selDiff=d;refreshStart();};
+    drow.appendChild(el);
+  });
   refreshStart();
   $('startBtn').onclick=()=>{
     if(!selEmpire||selRivals.size<2)return;
     $('start').style.display='none';
     $('game').style.display='flex';
-    newGame(selEmpire,[...selRivals]);
+    newGame(selEmpire,[...selRivals],selDiff);
     initMap();
     initInput();
     if(window.innerWidth<761){$('mapwrap').classList.remove('tilted');$('tiltBtn').textContent='Tilt: off';}
@@ -1197,8 +1222,9 @@ function buildStart(){
   };
 }
 function refreshStart(){
+  document.querySelectorAll('#diffrow .rival').forEach(d=>d.classList.toggle('sel',d.dataset.d===selDiff));
   document.querySelectorAll('.empcard').forEach(d=>d.classList.toggle('sel',d.dataset.k===selEmpire));
-  document.querySelectorAll('.rival').forEach(d=>{
+  document.querySelectorAll('#rivalrow .rival').forEach(d=>{
     d.classList.toggle('sel',selRivals.has(d.dataset.k));
     d.classList.toggle('off',d.dataset.k===selEmpire);
   });
