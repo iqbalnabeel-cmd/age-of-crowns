@@ -135,6 +135,14 @@ h1,h2,h3{font-weight:normal}
 .dcAct>div{display:flex;gap:6px}
 .dcAct>div button{flex:1}
 .dcAct button{font-size:12.5px;padding:6px 10px;white-space:nowrap}
+.trow{display:flex;align-items:center;gap:10px;background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:8px 10px;margin-bottom:7px}
+.trow svg{flex:none}
+.tinfo{flex:1;min-width:0}
+.tname{font-size:15px;color:var(--text)}
+.pips{color:var(--gold);font-size:12px;letter-spacing:2px;margin-left:4px}
+.tdesc{font-size:12px;color:var(--muted)}
+.tnext{font-size:12px;color:var(--text);margin-top:2px}
+.trow button{flex:none;min-width:62px}
 @media (max-width:760px){.dcSum{display:none}#abar{width:96%}}
 .zone{cursor:pointer}
 .zc{fill:#54707c;stroke:#2c3b42;stroke-width:1.5;opacity:.92}
@@ -185,6 +193,7 @@ h1,h2,h3{font-weight:normal}
     <span class="stat">Provinces: <b id="hProv">0</b>/40 (need 24)</span>
     <span class="stat">Turn <b id="hTurn">1</b></span>
     <span class="right">
+      <button id="techBtn">Tech</button>
       <button id="expBtn">Save code</button>
       <button id="animBtn">Anim: on</button>
       <button id="unitsBtn">Units</button>
@@ -204,7 +213,7 @@ h1,h2,h3{font-weight:normal}
     </div>
     <div id="side">
       <div id="mtabs"><button id="tabProv" class="on">Province</button><button id="tabLog">Chronicle</button></div>
-      <div id="help"><b>How to play:</b> tap an army figure, compose your force in the bar, press <b>Choose target</b>, then click a highlighted province &mdash; hover to preview the path. Armies march through your own land (foot 1 province, cavalry 2); entering enemy land ends the march in battle. <b>Forced</b> adds +1 province but troops arrive winded (&minus;20% until next turn). Set a <b>rally point</b> and new recruits march there on their own. Seas: build War Galleys from coasts; holding a sea uncontested lets armies cross it.</div>
+      <div id="help"><b>How to play:</b> tap an army figure, compose your force in the bar, press <b>Choose target</b>, then click a highlighted province &mdash; hover to preview the path. Armies march through your own land (foot 1 province, cavalry 2); entering enemy land ends the march in battle. <b>Forced</b> adds +1 province but troops arrive winded (&minus;20% until next turn). Set a <b>rally point</b> and new recruits march there on their own. Seas: build War Galleys from coasts; holding a sea uncontested lets armies cross it. Research in the <b>Tech</b> tree (one per turn) to strengthen your troops empire-wide.</div>
       <div id="panel"><div class="meta">Click a province to inspect it.</div></div>
       <div id="logwrap"><h3>Chronicle</h3><div id="log"></div></div>
     </div>
@@ -250,6 +259,19 @@ const ZONES={
 };
 const COASTZ={};
 for(const z in ZONES)ZONES[z].coasts.forEach(p=>{(COASTZ[p]=COASTZ[p]||[]).push(z);});
+const TECH={
+ blades:{name:'Blades',icon:'sword',units:'Spearmen & Swordsmen',lv:[
+  {n:'Iron Blades',c:60},{n:'Steel Blades',c:120},{n:'Master Smiths',c:200}]},
+ fletch:{name:'Fletching',icon:'longbow',units:'Longbows & Crossbows',lv:[
+  {n:'Fletcheries',c:60},{n:'Bodkin Arrows',c:120},{n:'Master Bowyers',c:200}]},
+ horse:{name:'Horsemanship',icon:'cavalry',units:'Cavalry',lv:[
+  {n:'Stirrups',c:60},{n:'Warhorse Breeding',c:120},{n:'Heavy Barding',c:200}]},
+ siege:{name:'Siegecraft',icon:'catapult',units:'Catapults',lv:[
+  {n:'Counterweights',c:60},{n:'Siege Engineers',c:120},{n:'Master Engineers',c:200}]},
+ sea:{name:'Seamanship',icon:'ship',units:'War Galleys',lv:[
+  {n:'Shipwrights',c:60},{n:'Naval Rams',c:120},{n:'Admiralty',c:200}]}
+};
+const TKEYS=Object.keys(TECH);
 const DIFFS={
  easy:{name:'Easy',thr:0.35,res:25,spend:0.55,grace:6,inc:1.0},
  norm:{name:'Normal',thr:0.12,res:10,spend:0.85,grace:2,inc:1.0},
@@ -273,6 +295,21 @@ function blend(h1,h2,t){
 }
 
 const SPD={spear:1,sword:1,longbow:1,crossbow:1,cavalry:2,catapult:1};
+function techLvOf(owner,tr){
+  if(!owner||!G.emp[owner]||!G.emp[owner].tech)return 0;
+  return G.emp[owner].tech[tr]||0;
+}
+function techMult(owner,t){
+  if(t==='spear'||t==='sword')return 1+0.10*techLvOf(owner,'blades');
+  if(t==='longbow'||t==='crossbow')return 1+0.10*techLvOf(owner,'fletch');
+  if(t==='cavalry')return 1+0.10*techLvOf(owner,'horse');
+  if(t==='catapult')return 1+0.10*techLvOf(owner,'siege');
+  return 1;
+}
+function spdOf(owner,t){
+  if(t==='cavalry'&&techLvOf(owner,'horse')>=3)return 3;
+  return SPD[t]||1;
+}
 
 let G=null;
 
@@ -281,7 +318,7 @@ function newGame(playerKey,rivalKeys,diff){
   const persPool=['agg','bld','opp'];
   const players=[playerKey,...rivalKeys];
   players.forEach(k=>{
-    G.emp[k]={key:k,gold:40,alive:true,ai:k!==playerKey,pers:pick(persPool)};
+    G.emp[k]={key:k,gold:40,alive:true,ai:k!==playerKey,pers:pick(persPool),tech:{blades:0,fletch:0,horse:0,siege:0,sea:0},lastResearch:0};
   });
   for(const key in MAPD.prov){
     const m=MAPD.prov[key];
@@ -305,8 +342,8 @@ function newGame(playerKey,rivalKeys,diff){
     G.prov[e[0]].adj.push(e[1]);
     G.prov[e[1]].adj.push(e[0]);
   });
-  G.fleets={};G.fmoved={};
-  for(const z in ZONES){G.fleets[z]={};G.fmoved[z]={};}
+  G.fleets={};G.fmoved={};G.fhalf={};
+  for(const z in ZONES){G.fleets[z]={};G.fmoved[z]={};G.fhalf[z]={};}
   players.forEach(k=>{
     const capZones=COASTZ[EMPIRES[k].cap];
     if(capZones&&capZones.length)G.fleets[capZones[0]][k]=1;
@@ -320,7 +357,7 @@ function incomeOf(k){return provsOf(k).reduce((s,p)=>s+p.inc*(p.capOf===k?2:1),0
 function avail(p,t){return (p.army[t]||0)-(p.moved[t]||0);}
 function availArmy(p){const a={};UKEYS.forEach(t=>{const n=avail(p,t);if(n>0)a[t]=n;});return a;}
 
-function strength(a,e,isDef,isCap){
+function strength(a,e,isDef,isCap,owner){
   const te=Math.max(1,cnt(e));let s=0;
   for(const t in a){
     if(!a[t])continue;
@@ -331,7 +368,7 @@ function strength(a,e,isDef,isCap){
       if(UNITS[t].beats.includes(u))m+=0.5*sh;
       if(UNITS[u].beats.includes(t))m-=0.25*sh;
     }
-    s+=a[t]*UNITS[t].pow*m;
+    s+=a[t]*UNITS[t].pow*m*techMult(owner,t);
   }
   if(isDef)s*=1.2;
   if(isCap)s*=1.15;
@@ -352,10 +389,10 @@ function removeUnits(a,n){
   return lost;
 }
 
-function volley(shooter,target){
+function volley(shooter,target,owner){
   const archers=(shooter.longbow||0)+(shooter.crossbow||0);
   if(!archers||!cnt(target))return 0;
-  const kills=Math.min(Math.round(archers*0.4),Math.floor(cnt(target)*0.4));
+  const kills=Math.min(Math.round(archers*0.4*(1+0.1*techLvOf(owner,'fletch'))),Math.floor(cnt(target)*0.4));
   removeUnits(target,kills);
   return kills;
 }
@@ -363,8 +400,9 @@ function volley(shooter,target){
 function oddsOf(att,defProv,aw){
   const def=defProv.army;
   if(cnt(def)===0)return 1;
-  const Sa=strength(att,def,false,false)*(1-0.2*(aw||0));
-  const Sd=strength(def,att,true,!!defProv.capOf)*(1-0.2*windedFrac(defProv));
+  let Sa=strength(att,def,false,false,G.player)*(1-0.2*(aw||0));
+  if(defProv.capOf)Sa*=1+0.05*techLvOf(G.player,'siege');
+  const Sd=strength(def,att,true,!!defProv.capOf,defProv.owner)*(1-0.2*windedFrac(defProv));
   return Math.pow(Sa,3)/(Math.pow(Sa,3)+Math.pow(Sd,3));
 }
 function oddsLabel(p){
@@ -388,15 +426,16 @@ function battle(fromKey,toKey,force,attackerKey){
     rep.win=true;
     return rep;
   }
-  rep.defVolley=volley(def,att);
-  rep.attVolley=volley(att,def);
+  rep.defVolley=volley(def,att,to.owner);
+  rep.attVolley=volley(att,def,attackerKey);
   if(cnt(att)===0){
     rep.win=false;rep.attLost=attStart;rep.defLost=defStart-cnt(def);
     return rep;
   }
   const awf=(arguments.length>4&&arguments[4]&&arguments[4].aw)?arguments[4].aw:0;
-  const Sa=strength(att,def,false,false)*rand(0.85,1.15)*(1-0.2*awf);
-  const Sd=strength(def,att,true,!!to.capOf)*rand(0.85,1.15)*(1-0.2*windedFrac(to));
+  let Sa=strength(att,def,false,false,attackerKey)*rand(0.85,1.15)*(1-0.2*awf);
+  if(to.capOf)Sa*=1+0.05*techLvOf(attackerKey,'siege');
+  const Sd=strength(def,att,true,!!to.capOf,to.owner)*rand(0.85,1.15)*(1-0.2*windedFrac(to));
   if(Sa>Sd){
     const lossN=Math.min(Math.round(cnt(att)*0.55*Sd/Sa),cnt(att)-1);
     removeUnits(att,lossN);
@@ -514,13 +553,23 @@ function addFleet(z,e,n,moved){
 function moveFleetTo(z1,z2,e){
   const n=fleetAvail(z1,e);
   if(n<=0||!ZONES[z1].adj.includes(z2))return 0;
+  const halfHere=Math.min(n,(G.fhalf[z1]&&G.fhalf[z1][e])||0);
+  const freshHere=n-halfHere;
   G.fleets[z1][e]-=n;
-  addFleet(z2,e,n,true);
+  if(G.fhalf[z1])G.fhalf[z1][e]=Math.max(0,((G.fhalf[z1][e])||0)-halfHere);
+  if(techLvOf(e,'sea')>=3&&freshHere>0){
+    G.fleets[z2][e]=(G.fleets[z2][e]||0)+n;
+    G.fhalf[z2]=G.fhalf[z2]||{};
+    G.fhalf[z2][e]=(G.fhalf[z2][e]||0)+freshHere;
+    G.fmoved[z2][e]=(G.fmoved[z2][e]||0)+halfHere;
+  }else{
+    addFleet(z2,e,n,true);
+  }
   return n;
 }
 function navalBattle(z,att,def){
   const a=fleetOf(z,att),d=fleetOf(z,def);
-  const Sa=a*rand(0.85,1.15),Sd=d*rand(0.85,1.15);
+  const Sa=a*(1+0.12*techLvOf(att,'sea'))*rand(0.85,1.15),Sd=d*(1+0.12*techLvOf(def,'sea'))*rand(0.85,1.15);
   const rep={z,att,def,a,d,win:false,attLost:0,defLost:0};
   if(Sa>Sd){
     const lost=Math.min(Math.round(a*0.5*Sd/Sa),a-1);
@@ -540,7 +589,7 @@ function forceRange(p,force){
   let r=Infinity;
   for(const t in force){
     if(!force[t])continue;
-    let mp=SPD[t]||1;
+    let mp=spdOf(p.owner,t);
     if(t==='cavalry'){
       const halfAvail=p.cavHalf||0;
       const fresh=Math.max(0,(p.army.cavalry||0)-((p.moved.cavalry)||0)-halfAvail);
@@ -623,6 +672,20 @@ function processRallyMoves(){
   });
 }
 
+function researchTech(empKey,tr){
+  const e=G.emp[empKey];
+  if(!e||!e.tech)return false;
+  const lv=e.tech[tr]||0;
+  if(lv>=3)return false;
+  if(e.lastResearch===G.turn)return false;
+  const cost=TECH[tr].lv[lv].c;
+  if(e.gold<cost)return false;
+  e.gold-=cost;
+  e.tech[tr]=lv+1;
+  e.lastResearch=G.turn;
+  return true;
+}
+
 const PERS={
  agg:{thr:1.12,reserve:10,mix:{cavalry:3,sword:3,spear:2,crossbow:1,longbow:1,catapult:1}},
  bld:{thr:1.45,reserve:30,mix:{spear:2,sword:2,longbow:2,crossbow:2,cavalry:1,catapult:2}},
@@ -653,6 +716,15 @@ function aiTurn(k){
   let spots=frontierOf(k);
   if(!spots.length)spots=provsOf(k);
   const reserve=P.reserve+D.res;
+  const prefs={agg:['blades','horse','siege','fletch','sea'],bld:['fletch','siege','blades','sea','horse'],opp:['horse','blades','fletch','sea','siege']}[e.pers];
+  if(e.tech&&e.lastResearch!==G.turn){
+    for(const tr of prefs){
+      const lv=e.tech[tr]||0;
+      if(lv>=3)continue;
+      const cost=TECH[tr].lv[lv].c;
+      if(e.gold>=cost+reserve+20){researchTech(k,tr);break;}
+    }
+  }
   let budget=Math.max(0,Math.round((e.gold-reserve)*D.spend));
   let guard=0;
   while(budget>=10&&e.gold>=10&&spots.length&&guard++<60){
@@ -692,8 +764,9 @@ function aiTurn(k){
     for(const nk of reachable(p,k)){
       const n=G.prov[nk];
       if(n.owner===k)continue;
-      const Sa=strength(force,n.army,false,false);
-      const Sd=Math.max(strength(n.army,force,true,!!n.capOf),0.2);
+      let Sa=strength(force,n.army,false,false,k);
+      if(n.capOf)Sa*=1+0.05*techLvOf(k,'siege');
+      const Sd=Math.max(strength(n.army,force,true,!!n.capOf,n.owner),0.2);
       const ratio=Sa/Sd;
       let score=ratio;
       if(e.pers==='opp')score=ratio+(2-Math.min(2,cnt(n.army)/4));
@@ -856,6 +929,8 @@ function loadGame(){
   if(G.rally===undefined)G.rally=null;
   G.forced=false;G.marchInfo=null;
   Object.values(G.prov).forEach(p=>{if(!p.winded)p.winded={};if(!p.rallyq)p.rallyq={};});
+  Object.values(G.emp).forEach(e=>{if(!e.tech)e.tech={blades:0,fletch:0,horse:0,siege:0,sea:0};if(e.lastResearch===undefined)e.lastResearch=0;});
+  if(!G.fhalf){G.fhalf={};for(const z in ZONES)G.fhalf[z]={};}
   if(!G.fleets){
     G.fleets={};G.fmoved={};
     for(const z in ZONES){G.fleets[z]={};G.fmoved[z]={};}
@@ -874,6 +949,41 @@ function loadGame(){
   VB.x=cap.cx-VB.w/2;VB.y=cap.cy-VB.h/2;
   applyVB();
   return true;
+}
+function techEffect(tr,lv){
+  const pct=10*lv;
+  if(tr==='blades')return '+'+pct+'% infantry strength';
+  if(tr==='fletch')return '+'+pct+'% archer strength & volleys';
+  if(tr==='horse')return '+'+pct+'% cavalry strength'+(lv>=3?' · cavalry range 3':'');
+  if(tr==='siege')return '+'+pct+'% siege strength · +'+(5*lv)+'% vs capitals';
+  if(tr==='sea')return '+'+(12*lv)+'% fleet strength'+(lv>=3?' · fleets sail 2 seas':'');
+  return '';
+}
+function showTech(){
+  const e=G.emp[G.player];
+  let h='<div class="meta" style="margin-bottom:8px">One research per turn. Effects apply to your whole empire and show in battle odds.'+(e.lastResearch===G.turn?' <b style="color:var(--danger)">Already researched this turn.</b>':'')+'</div>';
+  TKEYS.forEach(tr=>{
+    const T=TECH[tr];
+    const lv=e.tech[tr]||0;
+    const next=lv<3?T.lv[lv]:null;
+    h+='<div class="trow">'+artSvg(T.icon,34,'#c9a227');
+    h+='<div class="tinfo"><div class="tname">'+T.name+' <span class="pips">'+'&#9679;'.repeat(lv)+'&#9675;'.repeat(3-lv)+'</span></div>';
+    h+='<div class="tdesc">'+T.units+' &middot; '+(lv>0?techEffect(tr,lv):'no bonus yet')+'</div>';
+    h+=next?'<div class="tnext">Next: <b>'+next.n+'</b> ('+next.c+'g) &rarr; '+techEffect(tr,lv+1)+'</div>':'<div class="tnext" style="color:#7ec97e">Mastered</div>';
+    h+='</div>';
+    if(next)h+='<button '+(e.gold<next.c||e.lastResearch===G.turn?'disabled':'class="primary"')+' onclick="doResearch(\''+tr+'\')">'+next.c+'g</button>';
+    h+='</div>';
+  });
+  showModal('Tech tree &mdash; '+e.gold+' gold',h,[['Close',closeModal,'primary']]);
+}
+function doResearch(tr){
+  if(researchTech(G.player,tr)){
+    const lv=G.emp[G.player].tech[tr];
+    log('Your scholars mastered <b>'+TECH[tr].lv[lv-1].n+'</b> ('+techEffect(tr,lv)+').','turnmark');
+    renderHdr();
+    saveGame();
+    showTech();
+  }
 }
 function showUnitCards(){
   let h='<div class="ucards">';
@@ -1334,7 +1444,7 @@ function endTurn(){
     if(!G.over){
       G.turn++;
       Object.values(G.prov).forEach(p=>{p.moved={};p.cavHalf=0;});
-      for(const z in ZONES)G.fmoved[z]={};
+      for(const z in ZONES){G.fmoved[z]={};G.fhalf[z]={};}
       clearWinded(G.player);
       G.animQ=[];
       processRallyMoves();
@@ -1445,6 +1555,7 @@ function refreshStart(){
 
 $('endTurn').addEventListener('click',endTurn);
 $('unitsBtn').addEventListener('click',showUnitCards);
+$('techBtn').addEventListener('click',showTech);
 $('animBtn').addEventListener('click',()=>{ANIM_ON=!ANIM_ON;$('animBtn').textContent='Anim: '+(ANIM_ON?'on':'off');});
 $('expBtn').addEventListener('click',exportSave);
 $('impBtn').addEventListener('click',importSave);
