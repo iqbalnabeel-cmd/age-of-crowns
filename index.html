@@ -70,10 +70,11 @@ h1,h2,h3{font-weight:normal}
 #help{font-size:12px;color:var(--muted);padding:8px 12px;border-bottom:1px solid var(--border);line-height:1.5}
 #help b{color:var(--text)}
 /* map styling */
-.pv{stroke:var(--ink);stroke-width:1.2;cursor:pointer}
-.pv.sel{stroke:#fffbe8;stroke-width:3}
-.pv.target{stroke:var(--gold);stroke-width:3.5;stroke-dasharray:9 6}
-.pv.pathhl{stroke:#f3ead2;stroke-width:3}
+.cell{stroke:#9a8c72;stroke-width:0.45;cursor:pointer}
+.cell.target{stroke:var(--gold);stroke-width:1.6;stroke-dasharray:3 2.4}
+.cell.pathhl{stroke:#fffbe8;stroke-width:1.8}
+.cell.occupied{stroke:#6e5a3a;stroke-width:0.9;stroke-dasharray:2.4 1.8}
+.provline{stroke:#3f3221;stroke-width:1.1}
 .armyfig{cursor:pointer}
 .searoute{fill:none;stroke:#5d7d8a;stroke-width:2;stroke-dasharray:7 6;opacity:.8;pointer-events:none}
 .searoute.target{stroke:var(--gold);stroke-width:3;opacity:1}
@@ -529,6 +530,28 @@ function marchMap5(fromCell,e,range){
   }
   return {dist,parent};
 }
+function fullPathTo(fromCell,toCell,e){
+  // BFS ignoring range; passes own/neutral-empty cells; enemy armies & foreign cities are terminal (path may end AT toCell)
+  const dist={};dist[fromCell]=0;const parent={};
+  const q=[fromCell];
+  while(q.length){
+    const cur=q.shift();
+    if(cur===toCell)return marchPath5(fromCell,toCell,parent);
+    for(const nk of CADJ[cur]){
+      if(nk in dist)continue;
+      dist[nk]=dist[cur]+1;parent[nk]=cur;
+      if(nk===toCell)return marchPath5(fromCell,toCell,parent);
+      const cell=cellOf(nk);
+      const foreignCity=cell.city&&ownerOf(cell.p)!==e;
+      if(!isBlockedCell(nk,e)&&!foreignCity)q.push(nk);
+    }
+  }
+  return null;
+}
+function occupiedProv(pid){
+  const o=ownerOf(pid);
+  return o!=='neutral'&&homeEmpOf(provOf(pid))!==o;
+}
 function marchPath5(fromCell,toCell,parent){
   const path=[toCell];let c=toCell,guard=0;
   while(c!==fromCell&&guard++<80){c=parent[c];path.unshift(c);}
@@ -712,6 +735,50 @@ function buyGalley5(pid,z){
   addFleet(z,G.player,1,true);
   renderAll();
   openCityPanel(pid);
+}
+
+function advanceOrders(e){
+  const starts=armiesOf(e);
+  for(const startCid of starts){
+    let cur=startCid;
+    let live=G.armies[cur];
+    if(!live||!live.ord||live.e!==e)continue;
+    const rng=forceRange(live,live.u);
+    let steps=0;
+    while(steps<rng){
+      live=G.armies[cur];
+      if(!live||!live.ord){break;}
+      const dest=live.ord;
+      const path=fullPathTo(cur,dest,e);
+      if(!path||path.length<2){delete live.ord;break;}
+      const nxt=path[1];
+      const cell=cellOf(nxt);
+      if(isBlockedCell(nxt,e)){ // enemy/neutral army (incl. a garrisoned city) blocks the step
+        if(nxt===dest)delete live.ord;  // arrived adjacent to the target — clear order, let player assault
+        break;
+      }
+      // (undefended foreign cities are allowed: placeArmy captures them on entry)
+      const force=takeForce5(cur,live.u);
+      if(!cnt(force))break;
+      if(G.animQ)G.animQ.push({from:cur,to:nxt,e,t:domType(force)});
+      const baseMv=G.armies[nxt]?G.armies[nxt].mv:0;
+      placeArmy(nxt,e,force,baseMv+1,false);
+      const moved=G.armies[nxt];
+      if(!moved)break;
+      if(nxt===dest){delete moved.ord;break;}
+      moved.ord=dest;
+      cur=nxt;steps++;
+    }
+  }
+}
+function orderEtaTurns(cid){
+  const a=G.armies[cid];
+  if(!a||!a.ord)return null;
+  const path=fullPathTo(cid,a.ord,a.e);
+  if(!path)return null;
+  const remaining=path.length-1;
+  const rng=Math.max(1,forceRange(a,a.u));
+  return Math.max(1,Math.ceil(remaining/rng));
 }
 
 // ==== v5_ai.js ====
@@ -1048,6 +1115,7 @@ function updateMap(){
     const c=MAPD5.cells[cid];
     el.setAttribute('fill',tint(ownerOf(c.p)));
     el.classList.toggle('target',!!targets[cid]);
+    el.classList.toggle('occupied',occupiedProv(c.p));
   });
   const R=4.6*s, RC=5.8*s, LF=13*s, CF=12*s, SW=1.3*s, LSW=3.4*s;
   let ph='';
@@ -1107,6 +1175,24 @@ function updateMap(){
     ah+='</g>';
   }
   svg.querySelector('#gArmy').innerHTML=ah;
+  // draw march-order routes (dashed) for the player's armies
+  let oh='';
+  const sw=Math.max(1.2,2.2*s);
+  for(const cid in G.armies){
+    const a=G.armies[cid];
+    if(a.e!==G.player||!a.ord)continue;
+    const path=fullPathTo(cid,a.ord,G.player);
+    if(!path||path.length<2)continue;
+    let d='M'+cellOf(path[0]).x+' '+cellOf(path[0]).y;
+    for(let i=1;i<path.length;i++)d+=' L'+cellOf(path[i]).x+' '+cellOf(path[i]).y;
+    oh+='<path d="'+d+'" fill="none" stroke="#241d17" stroke-width="'+(sw+1.4*s)+'" stroke-linecap="round" opacity="0.35"/>';
+    oh+='<path d="'+d+'" fill="none" stroke="#fffbe8" stroke-width="'+sw+'" stroke-linecap="round" stroke-dasharray="'+(5*s)+' '+(4*s)+'"/>';
+    const dc=cellOf(a.ord);
+    oh+='<circle cx="'+dc.x+'" cy="'+dc.y+'" r="'+(4*s)+'" fill="none" stroke="#fffbe8" stroke-width="'+(1.6*s)+'"/>';
+  }
+  let ol=svg.querySelector('#gOrder');
+  if(!ol){ol=document.createElementNS(SVGNS,'g');ol.id='gOrder';svg.insertBefore(ol,svg.querySelector('#gArmy'));}
+  ol.innerHTML=oh;
   let zh='';
   for(const z in ZONES){
     const Z=ZONES[z];
@@ -1206,7 +1292,7 @@ function armyClick(cid){
 function cityClick(pid){
   if(G.over)return;
   const cc=provOf(pid).citycell;
-  if(G.targeting&&G.selArmy&&G.marchInfo&&G.marchInfo.targets[cc]){cellClick(cc);return;}
+  if(G.targeting&&G.selArmy&&G.marchInfo){cellClick(cc);return;}
   G.targeting=false;G.marchInfo=null;G.zoneTargeting=false;G.selZone=null;
   const gar=G.armies[cc];
   if(G.selCity!==pid){G.send={};G.forced=false;}
@@ -1217,6 +1303,26 @@ function cityClick(pid){
 }
 function cellClick(cid){
   if(G.over)return;
+  // far-destination order: in targeting mode, clicking a reachable but out-of-range own/empty cell sets a march order
+  if(G.targeting&&G.selArmy&&G.marchInfo&&!G.marchInfo.targets[cid]){
+    const a=G.armies[G.selArmy];
+    const destCell=cellOf(cid);
+    const enemyHere=G.armies[cid]&&G.armies[cid].e!==G.player;
+    const foreignCity=destCell.city&&ownerOf(destCell.p)!==G.player;
+    if(a&&!enemyHere&&!foreignCity){
+      const path=fullPathTo(G.selArmy,cid,G.player);
+      if(path&&path.length>1){
+        a.ord=cid;
+        G.targeting=false;G.marchInfo=null;
+        advanceOrders(G.player);
+        const cur=Object.keys(G.armies).find(k=>G.armies[k]===a)||G.selArmy;
+        G.selArmy=(G.armies[cur]&&G.armies[cur].e===G.player)?cur:null;
+        playAnims(()=>{renderAll();if(G.selArmy)openArmyPanel(G.selArmy);saveGame();});
+        return;
+      }
+    }
+    G.targeting=false;G.marchInfo=null;renderAll();return;
+  }
   if(!(G.targeting&&G.selArmy&&G.marchInfo&&G.marchInfo.targets[cid])){
     G.targeting=false;G.marchInfo=null;renderAll();return;
   }
@@ -1245,6 +1351,7 @@ function cellClick(cid){
   }
 }
 function doMarch(from,cid,want,forced){
+  if(G.armies[from])delete G.armies[from].ord;
   const r=executeMarch(from,cid,want,forced,G.player);
   G.targeting=false;G.marchInfo=null;
   G.selArmy=(r&&r.type==='battle'&&!r.rep.win)?(G.armies[from]?from:null):(G.armies[cid]&&G.armies[cid].e===G.player?cid:null);
@@ -1276,8 +1383,13 @@ function openArmyPanel(cid){
   UKEYS.forEach(t=>{if(a.u[t])h+='<tr><td>'+uicon(t)+UNITS[t].name+'</td><td>'+a.u[t]+'</td></tr>';});
   h+='<tr><td><b>Total</b></td><td><b>'+cnt(a.u)+'</b></td></tr></table>';
   if(a.e===G.player&&!G.over){
-    h+='<div class="meta">Compose your force in the bar under the map, then press Choose target.</div>';
-    if(G.targeting)h+='<div class="meta">Click a highlighted cell, army, or city.</div>';
+    if(a.ord){
+      const eta=orderEtaTurns(cid);
+      h+='<div class="meta">On the march to <b>'+provOf(cellOf(a.ord).p).city+'</b>'+(eta?' &middot; arrives in '+eta+' turn'+(eta>1?'s':''):'')+'.</div>';
+      h+='<button style="width:100%;margin-top:4px" onclick="cancelOrder(\''+cid+'\')">Cancel march order</button>';
+    }
+    h+='<div class="meta" style="margin-top:6px">Compose your force in the bar, press Choose target, then click a nearby cell to march or a distant one to set a multi-turn order.</div>';
+    if(G.targeting)h+='<div class="meta">Click a highlighted cell to march now, or any reachable cell to set an order.</div>';
   }
   $('panel').innerHTML=h;
   $('side').classList.remove('mlog');
@@ -1391,6 +1503,8 @@ function endTurn(){
       G.turn++;
       armiesOf(G.player).forEach(c=>{G.armies[c].mv=0;G.armies[c].w=0;});
       for(const z in ZONES){G.fmoved[z]={};G.fhalf[z]={};}
+      G.animQ=[];
+      advanceOrders(G.player);
       G.emp[G.player].gold+=incomeOf(G.player);
       log('Turn '+G.turn+' — your coffers grow by '+incomeOf(G.player)+' gold.','turnmark');
     }
@@ -1407,6 +1521,11 @@ function gameOver(win,msg){
   showModal(win?'THE WORLD IS YOURS':'THE CROWN IS LOST',
     msg+'<br><br>'+(win?'A golden age begins under your rule.':'History will remember your attempt.'),
     [['Play again',()=>location.reload(),'primary']]);
+}
+
+function cancelOrder(cid){
+  if(G.armies[cid])delete G.armies[cid].ord;
+  renderAll();openArmyPanel(cid);saveGame();
 }
 
 // ==== seg_zonefns.js ====
