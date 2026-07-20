@@ -1031,15 +1031,17 @@ function initMap(){
   });
   fitView();
 }
-let lastZoomMode=null;
+let lastW=null;
 function applyVB(){
   $('map').setAttribute('viewBox',VB.x+' '+VB.y+' '+VB.w+' '+VB.h);
-  const mode=VB.w>ZOOMTH?'far':(VB.w<=CHIPTH?'close':'mid');
-  if(mode!==lastZoomMode){lastZoomMode=mode;if(G)updateMap();}
+  if(G&&VB.w!==lastW){lastW=VB.w;updateMap();}
 }
 function updateMap(){
   const svg=$('map');
+  const cw=svg.clientWidth||svg.getBoundingClientRect().width||1000;
+  const s=VB.w/cw;                 // map units per screen pixel
   const near=VB.w<=ZOOMTH;
+  const showAll=VB.w<=1150;         // show every city label only when zoomed in enough
   const targets=(G.targeting&&G.selArmy&&G.marchInfo)?G.marchInfo.targets:{};
   svg.querySelectorAll('#gCell path').forEach(el=>{
     const cid=el.getAttribute('data-c');
@@ -1047,25 +1049,28 @@ function updateMap(){
     el.setAttribute('fill',tint(ownerOf(c.p)));
     el.classList.toggle('target',!!targets[cid]);
   });
+  const R=4.6*s, RC=5.8*s, LF=13*s, CF=12*s, SW=1.3*s, LSW=3.4*s;
   let ph='';
   for(const pid in MAPD5.provs){
     const pv=provOf(pid);
     const own=ownerOf(pid);
     const gar=G.armies[pv.citycell];
-    const gn=(gar&&gar.e===own)?cnt(gar.u):(gar?cnt(gar.u):0);
     const selc=G.selCity===pid;
+    const showLbl=showAll||pv.cap||pv.home;
     ph+='<g class="pin" data-p="'+pid+'">';
     if(selc){
-      ph+='<circle cx="'+pv.cx+'" cy="'+pv.cy+'" r="17" fill="#c9a227" opacity="0.15"/>';
-      ph+='<circle cx="'+pv.cx+'" cy="'+pv.cy+'" r="17" fill="none" stroke="#fffbe8" stroke-width="2" stroke-dasharray="5 4"/>';
+      const rr=17*s;
+      ph+='<circle cx="'+pv.cx+'" cy="'+pv.cy+'" r="'+rr+'" fill="#c9a227" opacity="0.15"/>';
+      ph+='<circle cx="'+pv.cx+'" cy="'+pv.cy+'" r="'+rr+'" fill="none" stroke="#fffbe8" stroke-width="'+(2*s)+'" stroke-dasharray="'+(5*s)+' '+(4*s)+'"/>';
     }
-    ph+='<circle cx="'+pv.cx+'" cy="'+pv.cy+'" r="'+(pv.cap?5.5:4.5)+'" fill="'+empColor(own)+'" stroke="#241d17" stroke-width="1.3"/>';
-    if(pv.cap)ph+='<text class="cap" x="'+pv.cx+'" y="'+(pv.cy-8)+'">&#9733;</text>';
-    if(near||pv.cap||pv.home)ph+='<text class="lbl" x="'+pv.cx+'" y="'+(pv.cy+16)+'">'+pv.city+(gar?' ('+cnt(gar.u)+')':'')+'</text>';
+    ph+='<circle cx="'+pv.cx+'" cy="'+pv.cy+'" r="'+(pv.cap?RC:R)+'" fill="'+empColor(own)+'" stroke="#241d17" stroke-width="'+SW+'"/>';
+    if(pv.cap)ph+='<text x="'+pv.cx+'" y="'+(pv.cy-7*s)+'" font-size="'+CF+'" fill="#8a6a10" text-anchor="middle">&#9733;</text>';
+    if(showLbl)ph+='<text x="'+pv.cx+'" y="'+(pv.cy+16*s)+'" font-size="'+LF+'" font-weight="bold" fill="#241a10" text-anchor="middle" style="paint-order:stroke;stroke:#f3ecd8;stroke-width:'+LSW+'px">'+pv.city+(gar?' ('+cnt(gar.u)+')':'')+'</text>';
     ph+='</g>';
   }
   svg.querySelector('#gPin').innerHTML=ph;
   const close=VB.w<=CHIPTH;
+  const fs=0.72*s*1.4;             // figure scale (screen-constant-ish)
   let ah='';
   for(const cid in G.armies){
     const a=G.armies[cid];
@@ -1079,24 +1084,26 @@ function updateMap(){
     const sel=G.selArmy===cid;
     ah+='<g class="armyfig" data-a="'+cid+'">';
     if(sel){
-      ah+='<circle cx="'+c.x+'" cy="'+c.y+'" r="21" fill="#c9a227" opacity="0.15"/>';
-      ah+='<circle cx="'+c.x+'" cy="'+c.y+'" r="21" fill="none" stroke="#fffbe8" stroke-width="2" stroke-dasharray="6 4"/>';
+      const rr=21*s;
+      ah+='<circle cx="'+c.x+'" cy="'+c.y+'" r="'+rr+'" fill="#c9a227" opacity="0.15"/>';
+      ah+='<circle cx="'+c.x+'" cy="'+c.y+'" r="'+rr+'" fill="none" stroke="#fffbe8" stroke-width="'+(2*s)+'" stroke-dasharray="'+(6*s)+' '+(4*s)+'"/>';
     }
-    ah+='<g transform="translate('+(c.x-11)+' '+(c.y-13)+') scale(0.72)" style="color:'+col+'">'+ART[dt]+'</g>';
+    ah+='<g transform="translate('+(c.x-16*s)+' '+(c.y-18*s)+') scale('+fs+')" style="color:'+col+'">'+ART[dt]+'</g>';
     if(close||sel){
       const types=UKEYS.filter(t=>a.u[t]);
-      let chy=c.y-Math.min(types.length,6)*5.5;
+      const cw2=22*s, chh=10*s;
+      let chy=c.y-Math.min(types.length,6)*(chh+1)/2;
       types.slice(0,6).forEach(t=>{
-        ah+='<rect x="'+(c.x+10)+'" y="'+chy+'" width="22" height="10" rx="3" fill="'+col+'" stroke="#241d17" stroke-width="0.7"/>';
-        ah+='<g transform="translate('+(c.x+10.5)+' '+(chy+0.5)+') scale(0.56)" style="color:#f5edd8">'+ICON[t]+'</g>';
-        ah+='<text x="'+(c.x+30)+'" y="'+(chy+7.8)+'" font-size="7" font-weight="bold" fill="#fff" text-anchor="end" style="paint-order:stroke;stroke:#241d17;stroke-width:1.4px">'+a.u[t]+'</text>';
-        chy+=11;
+        ah+='<rect x="'+(c.x+13*s)+'" y="'+chy+'" width="'+cw2+'" height="'+chh+'" rx="'+(3*s)+'" fill="'+col+'" stroke="#241d17" stroke-width="'+(0.7*s)+'"/>';
+        ah+='<g transform="translate('+(c.x+13.5*s)+' '+(chy+0.5*s)+') scale('+(0.56*s)+')" style="color:#f5edd8">'+ICON[t]+'</g>';
+        ah+='<text x="'+(c.x+33*s)+'" y="'+(chy+7.8*s)+'" font-size="'+(7*s)+'" font-weight="bold" fill="#fff" text-anchor="end" style="paint-order:stroke;stroke:#241d17;stroke-width:'+(1.4*s)+'px">'+a.u[t]+'</text>';
+        chy+=chh+1*s;
       });
     }else{
-      ah+='<rect x="'+(c.x+9)+'" y="'+(c.y-4)+'" width="24" height="13" rx="3.5" fill="'+col+'" stroke="#241d17" stroke-width="0.9"/>';
-      ah+='<text x="'+(c.x+21)+'" y="'+(c.y+6)+'" font-size="9.5" font-weight="bold" fill="#fff" text-anchor="middle" style="paint-order:stroke;stroke:#241d17;stroke-width:1.8px">'+tot+'</text>';
+      ah+='<rect x="'+(c.x+11*s)+'" y="'+(c.y-6*s)+'" width="'+(24*s)+'" height="'+(14*s)+'" rx="'+(3.5*s)+'" fill="'+col+'" stroke="#241d17" stroke-width="'+(0.9*s)+'"/>';
+      ah+='<text x="'+(c.x+23*s)+'" y="'+(c.y+4.5*s)+'" font-size="'+(9.5*s)+'" font-weight="bold" fill="#fff" text-anchor="middle" style="paint-order:stroke;stroke:#241d17;stroke-width:'+(1.8*s)+'px">'+tot+'</text>';
     }
-    if(a.w)ah+='<text x="'+(c.x-18)+'" y="'+(c.y+14)+'" font-size="10" font-weight="bold" fill="#c94040" style="paint-order:stroke;stroke:#241d17;stroke-width:2px">~</text>';
+    if(a.w)ah+='<text x="'+(c.x-20*s)+'" y="'+(c.y+14*s)+'" font-size="'+(10*s)+'" font-weight="bold" fill="#c94040" style="paint-order:stroke;stroke:#241d17;stroke-width:'+(2*s)+'px">~</text>';
     ah+='</g>';
   }
   svg.querySelector('#gArmy').innerHTML=ah;
