@@ -503,6 +503,7 @@ function buildCadj(){
   MAPD5.adj.forEach(p=>{CADJ[p[0]].push(p[1]);CADJ[p[1]].push(p[0]);});
 }
 function forceRange(army,force){
+  if(army&&army.siege)return 0;      // a besieging army is committed until the siege lifts
   let r=Infinity;
   for(const t in force){
     if(!force[t])continue;
@@ -555,7 +556,11 @@ function occupiedProv(pid){
 }
 function marchPath5(fromCell,toCell,parent){
   const path=[toCell];let c=toCell,guard=0;
-  while(c!==fromCell&&guard++<80){c=parent[c];path.unshift(c);}
+  while(c!==fromCell&&guard++<80){
+    c=parent[c];
+    if(c===undefined){return null;}   // broken chain (e.g. a sea target) — no land path
+    path.unshift(c);
+  }
   return path;
 }
 function marchTargets5(cellId,force,forced){
@@ -605,6 +610,7 @@ function placeArmy(cellId,e,force,mv,w){
   claimCell(cellId,e);
 }
 function claimCell(cid,e){
+  if(!cid||!MAPD5.cells[cid])return;
   const prev=cellOwnerOf(cid);
   if(prev===e)return;
   G.cellOwner[cid]=e;                 // the cell flips the moment the army reaches it (its centre)
@@ -709,7 +715,7 @@ function executeMarch(fromCell,toCell,want,forced,attackerKey){
   if(defArmy&&defArmy.e!==attackerKey){
     if(!tg.sea&&tg.d>1&&G.animQ){
       const bpath=marchPath5(fromCell,toCell,info.parent);
-      for(let i=0;i<bpath.length-1;i++){
+      if(bpath)for(let i=0;i<bpath.length-1;i++){
         G.animQ.push({from:bpath[i],to:bpath[i+1],e:attackerKey,t:domType(force)});
         claimCell(bpath[i],attackerKey);   // approach cells flip; the contested cell only flips on battle win
       }
@@ -719,7 +725,7 @@ function executeMarch(fromCell,toCell,want,forced,attackerKey){
   }
   if(!tg.sea&&tg.d>1){
     const path=marchPath5(fromCell,toCell,info.parent);
-    for(let i=0;i<path.length-1;i++){
+    if(path)for(let i=0;i<path.length-1;i++){
       if(G.animQ)G.animQ.push({from:path[i],to:path[i+1],e:attackerKey,t:domType(force)});
       claimCell(path[i],attackerKey);      // sweep-capture each cell whose centre the army passes this turn
     }
@@ -791,6 +797,50 @@ function orderEtaTurns(cid){
   return Math.max(1,Math.ceil(remaining/rng));
 }
 
+function layStartSiege(fromCell,cityCell,want,e){
+  // move the force to the cell adjacent to the city, claim the approach, then dig in
+  const info=marchTargets5(fromCell,want,false);
+  if(!info.targets[cityCell])return false;
+  const path=marchPath5(fromCell,cityCell,info.parent);   // [...,adjCell,cityCell]
+  if(!path||path.length<2)return false;
+  const adj=path[path.length-2];
+  const force=takeForce5(fromCell,want);
+  if(!cnt(force))return false;
+  for(let i=0;i<path.length-1;i++){                         // sweep-capture the approach cells
+    if(G.animQ&&i<path.length-2)G.animQ.push({from:path[i],to:path[i+1],e,t:domType(force)});
+    if(path[i]!==cityCell)claimCell(path[i],e);
+  }
+  placeArmy(adj,e,force,99,false);
+  const army=G.armies[adj];
+  if(army)army.siege=cityCell;
+  log(empName(e)+' lays siege to <b>'+provOf(cellOf(cityCell).p).city+'</b>.','');
+  return true;
+}
+function liftSiege(cellId){ const a=G.armies[cellId]; if(a){delete a.siege;a.mv=0;} }
+function resolveSieges(e){
+  for(const cid of armiesOf(e)){
+    const a=G.armies[cid];
+    if(!a.siege)continue;
+    const cityCell=a.siege;
+    if(!CADJ[cid].includes(cityCell)||cellOwnerOf(cityCell)===e){delete a.siege;continue;}
+    const gar=G.armies[cityCell];
+    const cityName=provOf(cellOf(cityCell).p).city;
+    if(gar&&cnt(gar.u)){
+      const loss=Math.max(1,Math.ceil(cnt(gar.u)*0.22));
+      removeUnits(gar.u,loss);
+      log(empName(e)+"'s siege grinds down <b>"+cityName+'</b> ('+loss+' lost, '+cnt(gar.u)+' hold out).','');
+    }
+    const g2=G.armies[cityCell];
+    if(!g2||!cnt(g2.u)){                    // garrison broken -> besiegers storm in and take the city
+      if(g2)delete G.armies[cityCell];
+      const force=takeForce5(cid,a.u);
+      if(G.animQ)G.animQ.push({from:cid,to:cityCell,e,t:domType(force)});
+      placeArmy(cityCell,e,force,99,false);
+      log(empName(e)+' storms the starved gates of <b>'+cityName+'</b>.','');
+    }
+  }
+}
+
 // ==== v5_ai.js ====
 // ================= V5 AI =================
 const PERS={
@@ -850,7 +900,7 @@ function aiArmyAct(k,cid,want,P,D){
   if(!dest){
     const rng=forceRange(army,want);
     const path=marchPath5(cid,tgt.cell,tgt.parent);
-    for(let i=Math.min(rng,path.length-2);i>=1;i--){
+    if(path)for(let i=Math.min(rng,path.length-2);i>=1;i--){
       const step=path[i];
       if(info.targets[step]&&(!G.armies[step]||G.armies[step].e===k)){dest=step;break;}
     }
@@ -860,6 +910,11 @@ function aiArmyAct(k,cid,want,P,D){
     if(r&&r.type==='battle')logBattle5(r.rep);
     return true;
   }
+  // couldn't win an assault this turn: if adjacent to the target city with a real force, dig in and besiege
+  if(info.targets[tgt.cell]&&CADJ[cid].includes(tgt.cell)&&cnt(want)>=4&&Math.random()<0.6){
+    layStartSiege(cid,tgt.cell,want,k);
+    return true;
+  }
   return false;
 }
 function aiTurn(k){
@@ -867,7 +922,8 @@ function aiTurn(k){
   if(!e.alive||G.over)return;
   const P=PERS[e.pers];
   const D=DIFFS[G.diff||'norm'];
-  armiesOf(k).forEach(c=>{G.armies[c].w=0;G.armies[c].mv=0;});
+  resolveSieges(k);
+  armiesOf(k).forEach(c=>{if(G.armies[c])G.armies[c].w=0,G.armies[c].mv=0;});
   e.gold+=Math.round(incomeOf(k)*D.inc);
   const reserve=P.reserve+D.res;
   const prefs={agg:['blades','horse','siege','fletch','sea'],bld:['fletch','siege','blades','sea','horse'],opp:['horse','blades','fletch','sea','siege']}[e.pers];
@@ -1015,6 +1071,24 @@ let ANIM_ON=true;
 const ZOOMTH=780;
 const CHIPTH=380;
 function tint(e){return e==='neutral'?PARCH:blend(PARCH,empColor(e),0.5);}
+let ROADS=null;
+function buildRoads(){
+  if(ROADS)return;
+  ROADS=[];
+  const seen={};
+  const cellProv={};for(const cid in MAPD5.cells)cellProv[cid]=MAPD5.cells[cid].p;
+  for(const a in CADJ){
+    const pa=cellProv[a];
+    for(const b of CADJ[a]){
+      const pb=cellProv[b];
+      if(pa===pb)continue;
+      const key=pa<pb?pa+'|'+pb:pb+'|'+pa;
+      if(seen[key])continue;seen[key]=1;
+      const A=provOf(pa),B=provOf(pb);
+      ROADS.push([A.cx,A.cy,B.cx,B.cy]);
+    }
+  }
+}
 function playAnims(done){
   const q=(G&&G.animQ)?G.animQ:[];
   if(G)G.animQ=[];
@@ -1096,8 +1170,12 @@ function initMap(){
   const svg=$('map');
   svg.innerHTML='';
   const mk=(tag,attrs)=>{const el=document.createElementNS(SVGNS,tag);for(const a in attrs)el.setAttribute(a,attrs[a]);return el;};
-  const gCell=mk('g',{id:'gCell'}),gOut=mk('g',{id:'gOut'}),gTer=mk('g',{id:'gTer'}),gPin=mk('g',{id:'gPin'}),gArmy=mk('g',{id:'gArmy'}),gZone=mk('g',{id:'gZone'});
-  svg.appendChild(gCell);svg.appendChild(gOut);svg.appendChild(gTer);svg.appendChild(gPin);svg.appendChild(gArmy);svg.appendChild(gZone);
+  const gCell=mk('g',{id:'gCell'}),gOut=mk('g',{id:'gOut'}),gTer=mk('g',{id:'gTer'}),gRoad=mk('g',{id:'gRoad'}),gPin=mk('g',{id:'gPin'}),gArmy=mk('g',{id:'gArmy'}),gZone=mk('g',{id:'gZone'});
+  svg.appendChild(gCell);svg.appendChild(gOut);svg.appendChild(gTer);svg.appendChild(gRoad);svg.appendChild(gPin);svg.appendChild(gArmy);svg.appendChild(gZone);
+  buildRoads();
+  let rh='';
+  ROADS.forEach(r=>{ rh+='<line x1="'+r[0]+'" y1="'+r[1]+'" x2="'+r[2]+'" y2="'+r[3]+'" stroke="#8a6f4a" stroke-width="1.1" stroke-dasharray="4 3" opacity="0.5"/>'; });
+  gRoad.innerHTML=rh;
   for(const cid in MAPD5.cells){
     const el=mk('path',{d:MAPD5.cells[cid].d,'data-c':cid,'class':'cell','fill':PARCH});
     el.setAttribute('fill-rule','evenodd');
@@ -1192,6 +1270,14 @@ function updateMap(){
     }
     if(a.w)ah+='<text x="'+(c.x-20*s)+'" y="'+(c.y+14*s)+'" font-size="'+(10*s)+'" font-weight="bold" fill="#c94040" style="paint-order:stroke;stroke:#241d17;stroke-width:'+(2*s)+'px">~</text>';
     ah+='</g>';
+  }
+  // besieged-city rings
+  for(const cid in G.armies){
+    const a=G.armies[cid];
+    if(!a.siege)continue;
+    const dc=cellOf(a.siege);
+    if(!dc)continue;
+    ah+='<circle cx="'+dc.x+'" cy="'+dc.y+'" r="'+(13*s)+'" fill="none" stroke="#c94040" stroke-width="'+(1.8*s)+'" stroke-dasharray="'+(4*s)+' '+(3*s)+'"/>';
   }
   svg.querySelector('#gArmy').innerHTML=ah;
   // draw march-order routes (dashed) for the player's armies
@@ -1366,17 +1452,21 @@ function cellClick(cid){
     const pct=Math.round(p*100);
     const cell=cellOf(cid);
     const nm=cell.city?provOf(cell.p).city:'the enemy army';
+    const btns=[['Assault!',()=>{closeModal();doMarch(from,cid,want,forced);},'primary']];
+    if(cell.city){btns.push(['Lay siege',()=>{closeModal();doSiege(from,cid,want);},'']);}
+    btns.push(['Cancel',closeModal,'']);
     showModal('Attack '+nm+'?',
       battleCard(force,G.player,def.u,def.e)+
       (isFm?'<div class="meta" style="text-align:center">Forced march: your troops fight winded (&minus;20%).</div>':'')+
-      '<div style="text-align:center;margin-top:4px">Estimated odds: <b>'+pct+'%</b> &mdash; '+oddsLabel(p)+'</div>',
-      [['Attack!',()=>{closeModal();doMarch(from,cid,want,forced);},'primary'],['Cancel',closeModal,'']]);
+      '<div style="text-align:center;margin-top:4px">Estimated odds: <b>'+pct+'%</b> &mdash; '+oddsLabel(p)+'</div>'+
+      (cell.city?'<div class="meta" style="text-align:center;margin-top:4px">Or lay siege: dig in next to the city and starve the garrison down over several turns (slow but no assault losses).</div>':''),
+      btns);
   }else{
     doMarch(from,cid,want,forced);
   }
 }
 function doMarch(from,cid,want,forced){
-  if(G.armies[from])delete G.armies[from].ord;
+  if(G.armies[from]){delete G.armies[from].ord;delete G.armies[from].siege;}
   const r=executeMarch(from,cid,want,forced,G.player);
   G.targeting=false;G.marchInfo=null;
   G.selArmy=(r&&r.type==='battle'&&!r.rep.win)?(G.armies[from]?from:null):(G.armies[cid]&&G.armies[cid].e===G.player?cid:null);
@@ -1408,6 +1498,10 @@ function openArmyPanel(cid){
   UKEYS.forEach(t=>{if(a.u[t])h+='<tr><td>'+uicon(t)+UNITS[t].name+'</td><td>'+a.u[t]+'</td></tr>';});
   h+='<tr><td><b>Total</b></td><td><b>'+cnt(a.u)+'</b></td></tr></table>';
   if(a.e===G.player&&!G.over){
+    if(a.siege){
+      h+='<div class="meta">Besieging <b>'+provOf(cellOf(a.siege).p).city+'</b> &middot; the garrison starves each turn.</div>';
+      h+='<button style="width:100%;margin-top:4px" onclick="doLiftSiege(\''+cid+'\')">Lift siege (free the army)</button>';
+    }
     if(a.ord){
       const eta=orderEtaTurns(cid);
       h+='<div class="meta">On the march to <b>'+provOf(cellOf(a.ord).p).city+'</b>'+(eta?' &middot; arrives in '+eta+' turn'+(eta>1?'s':''):'')+'.</div>';
@@ -1538,6 +1632,7 @@ function endTurn(){
       armiesOf(G.player).forEach(c=>{G.armies[c].mv=0;G.armies[c].w=0;});
       for(const z in ZONES){G.fmoved[z]={};G.fhalf[z]={};}
       G.animQ=[];
+      resolveSieges(G.player);
       advanceOrders(G.player);
       G.emp[G.player].gold+=incomeOf(G.player);
       log('Turn '+G.turn+' — your coffers grow by '+incomeOf(G.player)+' gold.','turnmark');
@@ -1561,6 +1656,22 @@ function cancelOrder(cid){
   if(G.armies[cid])delete G.armies[cid].ord;
   renderAll();openArmyPanel(cid);saveGame();
 }
+
+function doSiege(from,cid,want){
+  if(G.armies[from])delete G.armies[from].ord;
+  const ok=layStartSiege(from,cid,want,G.player);
+  G.targeting=false;G.marchInfo=null;G.send={};
+  playAnims(()=>{
+    // reselect the besieging army (it's now on the cell adjacent to the city)
+    let where=null;for(const c in G.armies){if(G.armies[c].e===G.player&&G.armies[c].siege===cid){where=c;break;}}
+    G.selArmy=where;
+    renderAll();
+    if(where)openArmyPanel(where);
+    saveGame();
+  });
+}
+
+function doLiftSiege(cid){ liftSiege(cid); renderAll(); openArmyPanel(cid); saveGame(); }
 
 // ==== seg_zonefns.js ====
 function zoneClick(z){
