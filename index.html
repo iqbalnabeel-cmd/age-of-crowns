@@ -447,20 +447,22 @@ for(const k in EMPIRES)BASE2EMP[EMPIRES[k].cap.replace(/\d+$/,'')]=k;
 function homeEmpOf(pv){return pv.home?BASE2EMP[pv.home]||null:null;}
 function cellOf(id){return MAPD5.cells[id];}
 function provOf(pid){return MAPD5.provs[pid];}
-function ownerOf(pid){return G.provOwner[pid]||'neutral';}
-function provsOf(e){return Object.keys(G.provOwner).filter(p=>G.provOwner[p]===e);}
+function cellOwnerOf(cid){return (G.cellOwner&&G.cellOwner[cid])||'neutral';}
+function ownerOf(pid){return cellOwnerOf(provOf(pid).citycell);}        // a city belongs to whoever holds its city cell
+function provsOf(e){return Object.keys(MAPD5.provs).filter(p=>ownerOf(p)===e);}  // cities held
+function cellsOf(e){let n=[];for(const c in G.cellOwner)if(G.cellOwner[c]===e)n.push(c);return n;}
+function occupiedCell(cid){const o=cellOwnerOf(cid);return o!=='neutral'&&homeEmpOf(provOf(cellOf(cid).p))!==o;}
 function armiesOf(e){return Object.keys(G.armies).filter(c=>G.armies[c].e===e);}
 function incomeOf(e){
-  let s=0,cells=0;
+  let s=0;
   provsOf(e).forEach(pid=>{
     const pv=provOf(pid);
     s+=pv.inc*((pv.cap&&homeEmpOf(pv)===e)?2:1);
-    cells+=pv.cells.length;
   });
-  return Math.round(s+cells*0.15);
+  return Math.round(s+cellsOf(e).length*0.15);
 }
 function newGame(playerKey,rivalKeys,diff){
-  G={turn:1,player:playerKey,emp:{},provOwner:{},armies:{},log:[],selArmy:null,selCity:null,selZone:null,
+  G={turn:1,player:playerKey,emp:{},cellOwner:{},armies:{},log:[],selArmy:null,selCity:null,selZone:null,
      targeting:false,marchInfo:null,send:{},forced:false,over:false,diff:diff||'norm',animQ:[],
      fleets:{},fmoved:{},fhalf:{},zoneTargeting:false};
   const persPool=['agg','bld','opp'];
@@ -470,14 +472,15 @@ function newGame(playerKey,rivalKeys,diff){
       tech:{blades:0,fletch:0,horse:0,siege:0,sea:0},lastResearch:0};
   });
   for(const z in ZONES){G.fleets[z]={};G.fmoved[z]={};G.fhalf[z]={};}
+  G.cellOwner={};
+  for(const cid in MAPD5.cells)G.cellOwner[cid]='neutral';
   for(const pid in MAPD5.provs){
     const pv=provOf(pid);
     const hk=homeEmpOf(pv);
     if(hk&&players.includes(hk)){
-      G.provOwner[pid]=hk;
+      pv.cells.forEach(c=>{G.cellOwner[c]=hk;});     // homeland starts fully owned, cell by cell
       G.armies[pv.citycell]={e:hk,u:pv.cap?{spear:4,sword:2,longbow:2,cavalry:2}:{spear:3,sword:1,longbow:1},mv:0,w:0};
     }else{
-      G.provOwner[pid]='neutral';
       const rich=pv.inc>=10;
       G.armies[pv.citycell]={e:'neutral',u:rich?{spear:4,sword:2,longbow:1}:{spear:3,sword:1},mv:0,w:0};
     }
@@ -524,8 +527,7 @@ function marchMap5(fromCell,e,range){
       if(nk in dist)continue;
       dist[nk]=d+1;parent[nk]=cur;
       const cell=cellOf(nk);
-      const foreignCity=cell.city&&ownerOf(cell.p)!==e;
-      if(!isBlockedCell(nk,e)&&!foreignCity)q.push(nk);
+      if(!isBlockedCell(nk,e))q.push(nk);
     }
   }
   return {dist,parent};
@@ -542,8 +544,7 @@ function fullPathTo(fromCell,toCell,e){
       dist[nk]=dist[cur]+1;parent[nk]=cur;
       if(nk===toCell)return marchPath5(fromCell,toCell,parent);
       const cell=cellOf(nk);
-      const foreignCity=cell.city&&ownerOf(cell.p)!==e;
-      if(!isBlockedCell(nk,e)&&!foreignCity)q.push(nk);
+      if(!isBlockedCell(nk,e))q.push(nk);
     }
   }
   return null;
@@ -601,23 +602,26 @@ function placeArmy(cellId,e,force,mv,w){
   }else{
     G.armies[cellId]={e,u:force,mv,w:w?1:0};
   }
-  const cell=cellOf(cellId);
-  if(cell.city&&ownerOf(cell.p)!==e){
-    flipProvince(cell.p,e);
-  }
+  claimCell(cellId,e);
 }
-function flipProvince(pid,e){
-  const old=ownerOf(pid);
-  G.provOwner[pid]=e;
-  log(empName(e)+' captured <b>'+provOf(pid).city+'</b>'+(old!=='neutral'?' from '+empName(old):'')+'.','');
-  if(old!=='neutral'&&G.emp[old])checkElim(old);
-  checkWin(e);
+function claimCell(cid,e){
+  const prev=cellOwnerOf(cid);
+  if(prev===e)return;
+  G.cellOwner[cid]=e;                 // the cell flips the moment the army reaches it (its centre)
+  const cell=cellOf(cid);
+  if(cell.city){                      // a city changed hands (only reached by beating its garrison, or walking into an undefended one)
+    const pid=cell.p;
+    log(empName(e)+' captured the city of <b>'+provOf(pid).city+'</b>'+(prev!=='neutral'?' from '+empName(prev):'')+'.','');
+    if(prev!=='neutral'&&G.emp[prev])checkElim(prev);
+    checkWin(e);
+  }
 }
 function checkElim(k){
   if(!G.emp[k]||!G.emp[k].alive)return;
   if(provsOf(k).length===0){
     G.emp[k].alive=false;
     armiesOf(k).forEach(c=>{delete G.armies[c];});
+    cellsOf(k).forEach(c=>{G.cellOwner[c]='neutral';});
     for(const z in ZONES)G.fleets[z][k]=0;
     log(EMPIRES[k].name+' has been wiped from the map!','turnmark');
     if(k===G.player)gameOver(false,'Your last city has fallen. The crown is lost.');
@@ -705,14 +709,20 @@ function executeMarch(fromCell,toCell,want,forced,attackerKey){
   if(defArmy&&defArmy.e!==attackerKey){
     if(!tg.sea&&tg.d>1&&G.animQ){
       const bpath=marchPath5(fromCell,toCell,info.parent);
-      for(let i=0;i<bpath.length-1;i++)G.animQ.push({from:bpath[i],to:bpath[i+1],e:attackerKey,t:domType(force)});
+      for(let i=0;i<bpath.length-1;i++){
+        G.animQ.push({from:bpath[i],to:bpath[i+1],e:attackerKey,t:domType(force)});
+        claimCell(bpath[i],attackerKey);   // approach cells flip; the contested cell only flips on battle win
+      }
       return {type:'battle',rep:battle5(fromCell,toCell,force,attackerKey,{forced:isForced,noAnim:true})};
     }
     return {type:'battle',rep:battle5(fromCell,toCell,force,attackerKey,{forced:isForced})};
   }
   if(!tg.sea&&tg.d>1){
     const path=marchPath5(fromCell,toCell,info.parent);
-    for(let i=0;i<path.length-1;i++)if(G.animQ)G.animQ.push({from:path[i],to:path[i+1],e:attackerKey,t:domType(force)});
+    for(let i=0;i<path.length-1;i++){
+      if(G.animQ)G.animQ.push({from:path[i],to:path[i+1],e:attackerKey,t:domType(force)});
+      claimCell(path[i],attackerKey);      // sweep-capture each cell whose centre the army passes this turn
+    }
   }else if(G.animQ){
     G.animQ.push({from:fromCell,to:toCell,e:attackerKey,t:domType(force)});
   }
@@ -1001,6 +1011,7 @@ function zoomBy(f){
 // ==== v5_ui_core.js ====
 // ================= V5 UI CORE =================
 let VB={x:0,y:0,w:MAPD5.W,h:MAPD5.H};
+let ANIM_ON=true;
 const ZOOMTH=780;
 const CHIPTH=380;
 function tint(e){return e==='neutral'?PARCH:blend(PARCH,empColor(e),0.5);}
@@ -1037,8 +1048,14 @@ function clearSave(){try{localStorage.removeItem('aoc5save');}catch(e){}}
 function loadGame(){
   let d=null;
   try{d=JSON.parse(localStorage.getItem('aoc5save'));}catch(e){}
-  if(!d||!d.provOwner)return false;
+  if(!d||(!d.cellOwner&&!d.provOwner))return false;
   G=d;
+  if(!G.cellOwner&&G.provOwner){ // migrate a pre-cell save: paint each province's cells with its owner
+    G.cellOwner={};
+    for(const cid in MAPD5.cells)G.cellOwner[cid]='neutral';
+    for(const pid in MAPD5.provs){const o=G.provOwner[pid]||'neutral';provOf(pid).cells.forEach(c=>{G.cellOwner[c]=o;});}
+    delete G.provOwner;
+  }
   G.animQ=[];G.selArmy=null;G.selCity=null;G.selZone=null;G.targeting=false;G.marchInfo=null;G.send={};G.forced=false;
   buildCadj();
   $('start').style.display='none';
@@ -1070,7 +1087,7 @@ function importSave(){
   if(!txt){msg.textContent='Paste a save code first.';return;}
   try{
     const d=JSON.parse(decodeURIComponent(escape(atob(txt))));
-    if(!d||!d.provOwner)throw 0;
+    if(!d||(!d.cellOwner&&!d.provOwner))throw 0;
     localStorage.setItem('aoc5save',JSON.stringify(d));
     loadGame();
   }catch(e){msg.textContent='That code could not be read (v4 codes do not work in v5).';}
@@ -1113,9 +1130,9 @@ function updateMap(){
   svg.querySelectorAll('#gCell path').forEach(el=>{
     const cid=el.getAttribute('data-c');
     const c=MAPD5.cells[cid];
-    el.setAttribute('fill',tint(ownerOf(c.p)));
+    el.setAttribute('fill',tint(cellOwnerOf(cid)));
     el.classList.toggle('target',!!targets[cid]);
-    el.classList.toggle('occupied',occupiedProv(c.p));
+    el.classList.toggle('occupied',occupiedCell(cid));
   });
   const R=4.6*s, RC=5.8*s, LF=13*s, CF=12*s, SW=1.3*s, LSW=3.4*s;
   let ph='';
@@ -1126,6 +1143,7 @@ function updateMap(){
     const selc=G.selCity===pid;
     const showLbl=showAll||pv.cap||pv.home;
     ph+='<g class="pin" data-p="'+pid+'">';
+    ph+='<circle cx="'+pv.cx+'" cy="'+pv.cy+'" r="'+(15*s)+'" fill="transparent"/>';
     if(selc){
       const rr=17*s;
       ph+='<circle cx="'+pv.cx+'" cy="'+pv.cy+'" r="'+rr+'" fill="#c9a227" opacity="0.15"/>';
@@ -1151,6 +1169,7 @@ function updateMap(){
     const dt=domType(a.u);
     const sel=G.selArmy===cid;
     ah+='<g class="armyfig" data-a="'+cid+'">';
+    ah+='<circle cx="'+c.x+'" cy="'+c.y+'" r="'+(16*s)+'" fill="transparent"/>';
     if(sel){
       const rr=21*s;
       ah+='<circle cx="'+c.x+'" cy="'+c.y+'" r="'+rr+'" fill="#c9a227" opacity="0.15"/>';
@@ -1199,6 +1218,7 @@ function updateMap(){
     const selCls=G.selZone===z?' zsel':'';
     const tgtCls=G.zoneTargeting&&G.selZone&&ZONES[G.selZone].adj.includes(z)?' ztgt':'';
     zh+='<g class="zone'+selCls+tgtCls+'" data-z="'+z+'">';
+    zh+='<circle cx="'+Z.x+'" cy="'+Z.y+'" r="'+(20*s)+'" fill="transparent"/>';
     zh+='<circle cx="'+Z.x+'" cy="'+Z.y+'" r="13" class="zc"/>';
     zh+=mapIcon('ship',Z.x-6.5,Z.y-7,'#dfeaf2');
     zh+='<text class="zn" x="'+Z.x+'" y="'+(Z.y+27)+'">'+Z.name+'</text>';
@@ -1283,9 +1303,12 @@ function showUnitCards(){
 function armyClick(cid){
   if(G.over)return;
   if(G.targeting&&G.selArmy&&G.marchInfo&&G.marchInfo.targets[cid]){cellClick(cid);return;}
-  G.targeting=false;G.marchInfo=null;G.zoneTargeting=false;G.selZone=null;G.selCity=null;
+  G.marchInfo=null;G.zoneTargeting=false;G.selZone=null;G.selCity=null;
   if(G.selArmy!==cid){G.send={};G.forced=false;}
   G.selArmy=cid;
+  const mine=G.armies[cid]&&G.armies[cid].e===G.player;
+  G.targeting=!!mine;                 // auto-arm: pick your army, then click a target directly
+  if(mine)computeMarch();
   renderAll();
   openArmyPanel(cid);
 }
@@ -1298,6 +1321,8 @@ function cityClick(pid){
   if(G.selCity!==pid){G.send={};G.forced=false;}
   G.selArmy=(gar&&gar.e===G.player)?cc:null;
   G.selCity=pid;
+  G.targeting=!!G.selArmy;
+  if(G.selArmy)computeMarch();
   renderAll();
   openCityPanel(pid);
 }
@@ -1493,11 +1518,20 @@ function startTargeting(){
   updateMap();
   if(G.selArmy)openArmyPanel(G.selArmy);
 }
+function playerCanStillMove(){
+  return armiesOf(G.player).some(c=>forceRange(G.armies[c],G.armies[c].u)>0);
+}
 function endTurn(){
   if(G.over)return;
+  if(!G._skipMoveWarn&&playerCanStillMove()){
+    showModal('End turn?','<div class="meta">Some of your armies can still move or attack this turn.</div>',
+      [['End turn anyway',()=>{closeModal();G._skipMoveWarn=true;endTurn();G._skipMoveWarn=false;},'primary'],['Keep playing',closeModal,'']]);
+    return;
+  }
   $('endTurn').disabled=true;
   G.animQ=[];
-  Object.keys(G.emp).forEach(k=>{if(k!==G.player)aiTurn(k);});
+  try{Object.keys(G.emp).forEach(k=>{if(k!==G.player)aiTurn(k);});}
+  catch(e){console.error('AI turn error:',e);}
   playAnims(()=>{
     if(!G.over){
       G.turn++;
@@ -1767,7 +1801,7 @@ $('tabLog').addEventListener('click',()=>{$('side').classList.add('mlog');docume
 buildStart();
 try{
   const sv=JSON.parse(localStorage.getItem('aoc5save'));
-  if(sv&&sv.provOwner&&!sv.over){
+  if(sv&&(sv.cellOwner||sv.provOwner)&&!sv.over){
     const b=$('contBtn');
     b.style.display='inline-block';
     b.textContent='Continue saved game — '+EMPIRES[sv.player].name+', turn '+sv.turn;
