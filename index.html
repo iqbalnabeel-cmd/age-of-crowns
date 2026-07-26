@@ -1735,6 +1735,7 @@ function cellClick(cid){
   }
   const from=G.selArmy;
   const army=G.armies[from];
+  if(!army){G.targeting=false;G.marchInfo=null;G.selArmy=null;renderAll();return;}   // selected army no longer exists
   const want={};
   UKEYS.forEach(t=>{want[t]=Math.max(0,Math.min((G.send&&G.send[t])||0,army.u[t]||0));});
   if(cnt(want)===0){G.targeting=false;G.marchInfo=null;renderAll();return;}
