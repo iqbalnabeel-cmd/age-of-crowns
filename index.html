@@ -51,9 +51,34 @@ h1,h2,h3{font-weight:normal}
 #map.dragging{cursor:grabbing}
 #zoomctl{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px;z-index:5}
 #zoomctl button{width:36px;height:36px;font-size:19px;padding:0}
-#side{width:320px;background:var(--panel);border-left:1px solid var(--border);display:flex;flex-direction:column;min-height:0}
-#panel{padding:12px;border-bottom:1px solid var(--border);overflow-y:auto;max-height:60%}
-#panel h3{color:var(--gold);font-size:17px;margin-bottom:6px}
+/* ---- CoN-style chrome (pass 3c) ---- */
+#rail{width:74px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;gap:4px;padding:8px 5px;overflow-y:auto;flex:none;z-index:7}
+.rbtn{display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 2px;border:1px solid transparent;background:transparent;border-radius:8px;position:relative}
+.rbtn:hover{border-color:var(--gold);background:var(--panel2)}
+.rbtn .ric{font-size:19px;line-height:1;color:var(--gold)}
+.rbtn .rlb{font-size:9.5px;color:var(--muted);letter-spacing:0.4px;white-space:nowrap}
+#logBadge{position:absolute;top:3px;right:8px;background:var(--danger);color:#fff;border-radius:8px;font-size:9px;min-width:14px;padding:1px 3px;display:none;text-align:center}
+#drawer{position:absolute;top:0;right:0;bottom:0;width:330px;max-width:92%;background:rgba(24,19,14,.96);border-left:1px solid var(--gold);z-index:8;display:flex;flex-direction:column;transform:translateX(105%);transition:transform .22s ease}
+#drawer.open{transform:translateX(0)}
+#dHead{display:flex;align-items:center;justify-content:space-between;padding:8px 12px 4px}
+#dHead span{color:var(--gold);font-size:17px}
+#dHead button,#dHead2 button{border:none;background:transparent;font-size:20px;color:var(--muted);padding:0 6px}
+#dHead button:hover,#dHead2 button:hover{color:var(--gold)}
+#logdrawer{position:absolute;top:0;right:0;bottom:0;width:310px;max-width:88%;background:rgba(24,19,14,.97);border-left:1px solid var(--border);z-index:9;transform:translateX(105%);transition:transform .22s ease;display:flex;flex-direction:column}
+#logdrawer.open{transform:translateX(0)}
+#dHead2{display:flex;align-items:center;justify-content:space-between;padding:8px 12px 4px}
+#dHead2 h3{color:var(--gold);font-size:16px}
+#log{flex:1;overflow-y:auto;padding:0 12px 12px;font-size:13px;color:var(--muted);line-height:1.5}
+#log .l{border-bottom:1px solid #3a3025;padding:4px 0}
+#log .turnmark{color:var(--gold)}
+.dtabs{display:flex;border-bottom:1px solid var(--border);margin:0 -12px 8px}
+.dtabs button{flex:1;border:none;border-radius:0;background:transparent;padding:7px;color:var(--muted);font-size:13px}
+.dtabs button.on{color:var(--gold);border-bottom:2px solid var(--gold)}
+.dcRow{display:flex;align-items:center;gap:8px;margin-top:7px;font-size:12.5px;color:var(--muted)}
+.dcRow b{color:var(--text)}
+.dcRow button{margin-left:auto;font-size:12px;padding:4px 10px;flex:none}
+#panel{padding:4px 12px 12px;overflow-y:auto}
+#panel h3{color:var(--gold);font-size:16px;margin-bottom:6px}
 #panel .meta{color:var(--muted);font-size:13px;margin-bottom:8px}
 .utable{width:100%;font-size:13px;border-collapse:collapse;margin-bottom:8px}
 .utable td{padding:3px 4px;border-bottom:1px solid #3a3025}
@@ -62,13 +87,6 @@ h1,h2,h3{font-weight:normal}
 .buildrow button{padding:2px 10px;font-size:13px}
 .steprow{display:flex;align-items:center;justify-content:space-between;font-size:13px;margin:3px 0}
 .steprow input{width:52px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-family:inherit}
-#logwrap{flex:1;min-height:0;display:flex;flex-direction:column}
-#logwrap h3{padding:8px 12px 4px;color:var(--gold);font-size:15px}
-#log{flex:1;overflow-y:auto;padding:0 12px 12px;font-size:13px;color:var(--muted);line-height:1.5}
-#log .l{border-bottom:1px solid #3a3025;padding:4px 0}
-#log .turnmark{color:var(--gold)}
-#help{font-size:12px;color:var(--muted);padding:8px 12px;border-bottom:1px solid var(--border);line-height:1.5}
-#help b{color:var(--text)}
 /* map styling */
 .cell{stroke:#9a8c72;stroke-width:0.45;cursor:pointer}
 .cell.target{stroke:var(--gold);stroke-width:1.6;stroke-dasharray:3 2.4}
@@ -103,9 +121,6 @@ h1,h2,h3{font-weight:normal}
 .ucard .stats{color:var(--muted);margin:3px 0}
 .ucard .flav{font-style:italic;color:var(--muted);margin-top:5px;line-height:1.45}
 .ucard .vs{margin-top:4px}
-#mtabs{display:none;border-bottom:1px solid var(--border)}
-#mtabs button{flex:1;border:none;border-radius:0;padding:9px;background:var(--panel)}
-#mtabs button.on{color:var(--gold);border-bottom:2px solid var(--gold)}
 #contBtn{margin-top:12px;font-size:16px;padding:9px 30px;display:none}
 #impWrap{max-width:480px;margin:18px auto 0}
 #impWrap textarea{width:100%;height:60px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px;font-size:11px;font-family:monospace}
@@ -150,22 +165,19 @@ h1,h2,h3{font-weight:normal}
 .zone.zsel .zc{stroke:#fffbe8;stroke-width:3}
 .zone.ztgt .zc{stroke:var(--gold);stroke-width:3;stroke-dasharray:6 4}
 .zn{font-size:11px;fill:#41575f;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:#b6c2b6;stroke-width:2px}
-#main.nopanel #side{display:none}
 @media (max-width:760px){
-  #main{flex-direction:column}
-  #mapwrap{min-height:0}
-  #side{width:100%;height:46%;flex:none;border-left:none;border-top:1px solid var(--border)}
-  #help{display:none}
-  #mtabs{display:flex}
-  #side.mlog #panel{display:none}
-  #side:not(.mlog) #logwrap{display:none}
-  #panel{max-height:none;flex:1;border-bottom:none}
+  #rail{width:46px;padding:6px 3px}
+  .rbtn .rlb{display:none}
+  .rbtn .ric{font-size:20px}
+  #drawer{top:auto;left:0;right:0;bottom:0;width:100%;max-width:100%;max-height:62%;border-left:none;border-top:1px solid var(--gold);border-radius:10px 10px 0 0;transform:translateY(105%)}
+  #drawer.open{transform:translateY(0)}
+  #drawer.open~#abar{display:none!important}
+  #logdrawer{width:86%}
   #hdr{gap:8px;padding:6px 8px}
-  #hdr .title{font-size:15px;letter-spacing:1px}
+  #hdr .title{display:none}
   button{padding:8px 12px}
   .buildrow button{padding:6px 14px}
 }
-@media (min-width:761px) and (max-width:900px){#side{width:260px}}
 </style>
 </head>
 <body>
@@ -194,32 +206,35 @@ h1,h2,h3{font-weight:normal}
     <span class="stat">Gold: <b id="hGold">0</b> (<span id="hInc">+0</span>/turn)</span>
     <span class="stat">Cities: <b id="hProv">0</b>/80 (need 48)</span>
     <span class="stat">Turn <b id="hTurn">1</b></span>
-    <span class="right">
-      <button id="collapseBtn">Panels: on</button>
-      <button onclick="showStandings()">Standings</button>
-      <button id="techBtn">Tech</button>
-      <button id="expBtn">Save code</button>
-      <button id="animBtn">Anim: on</button>
-      <button id="unitsBtn">Units</button>
-      <button id="tiltBtn">Tilt: on</button>
-      <button id="endTurn" class="primary">End turn</button>
-    </span>
+    <span class="right"><button id="endTurn" class="primary">End turn</button></span>
   </div>
   <div id="main">
+    <div id="rail">
+      <button class="rbtn" onclick="showStandings()" title="Standings"><span class="ric">&#9818;</span><span class="rlb">Standings</span></button>
+      <button class="rbtn" id="techBtn" title="Research"><span class="ric">&#9879;</span><span class="rlb">Research</span></button>
+      <button class="rbtn" id="unitsBtn" title="Units"><span class="ric">&#9876;</span><span class="rlb">Units</span></button>
+      <button class="rbtn" id="logBtn" title="Chronicle"><span class="ric">&#128220;</span><span class="rlb">Chronicle</span><span id="logBadge"></span></button>
+      <button class="rbtn" id="expBtn" title="Save code"><span class="ric">&#128190;</span><span class="rlb">Save</span></button>
+      <button class="rbtn" id="animBtn" title="Toggle animations"><span class="ric">&#127916;</span><span class="rlb">Anim: on</span></button>
+      <button class="rbtn" id="tiltBtn" title="Toggle 3D tilt"><span class="ric">&#128444;</span><span class="rlb">Tilt: on</span></button>
+      <button class="rbtn" id="helpBtn" title="How to play"><span class="ric">?</span><span class="rlb">Help</span></button>
+    </div>
     <div id="mapwrap" class="tilted">
       <div id="tiltbox"><svg id="map" preserveAspectRatio="xMidYMid meet"></svg></div>
-      <div id="abar"></div>
       <div id="zoomctl">
         <button id="zin">+</button>
         <button id="zout">&minus;</button>
         <button id="zfit" title="Fit world">&#8962;</button>
       </div>
-    </div>
-    <div id="side">
-      <div id="mtabs"><button id="tabProv" class="on">Province</button><button id="tabLog">Chronicle</button></div>
-      <div id="help"><b>How to play:</b> tap an army figure, compose your force in the bar, press <b>Choose target</b>, then click any highlighted cell, city, or enemy army &mdash; hover previews the route. Armies roam freely across the world (foot 3 cells, cavalry 5, siege 2); enemy armies and cities must be fought. Take a city to capture its whole province. <b>Forced</b> adds +2 cells but troops arrive winded (&minus;20%). Cities recruit; coastal cities build War Galleys, and holding a sea uncontested lets armies cross it. Research in the <b>Tech</b> tree. Panels button hides the side panel.</div>
-      <div id="panel"><div class="meta">Click a province to inspect it.</div></div>
-      <div id="logwrap"><h3>Chronicle</h3><div id="log"></div></div>
+      <div id="drawer">
+        <div id="dHead"><span id="dTitle"></span><button id="dClose" onclick="closeDrawer(true)">&times;</button></div>
+        <div id="panel"></div>
+      </div>
+      <div id="abar"></div>
+      <div id="logdrawer">
+        <div id="dHead2"><h3>Chronicle</h3><button onclick="toggleLog(false)">&times;</button></div>
+        <div id="log"></div>
+      </div>
     </div>
   </div>
 </div>
@@ -1244,6 +1259,8 @@ function log(msg,cls){
   if(G.log.length>80)G.log.pop();
   const el=$('log');
   if(el)el.innerHTML=G.log.map(l=>'<div class="l '+l.cls+'">'+l.msg+'</div>').join('');
+  G._unread=(G._unread||0)+1;
+  if(typeof updateLogBadge==='function')updateLogBadge();
 }
 function empName(k){return k==='neutral'?'Free lords':(EMPIRES[k]?EMPIRES[k].name:k);}
 function empColor(k){return k==='neutral'?'#8a8578':(EMPIRES[k]?EMPIRES[k].color:'#8a8578');}
@@ -1289,6 +1306,28 @@ let VB={x:0,y:0,w:MAPD5.W,h:MAPD5.H};
 let ANIM_ON=true;
 const ZOOMTH=780;
 const CHIPTH=500;
+// ---- CoN-style chrome helpers (pass 3c) ----
+function setRailLbl(id,txt){const b=$(id);if(!b)return;const l=b.querySelector('.rlb');if(l)l.textContent=txt;else b.textContent=txt;}
+function showDrawer(title){$('dTitle').innerHTML=title||'';$('drawer').classList.add('open');}
+function closeDrawer(deselect){
+  $('drawer').classList.remove('open');
+  if(deselect&&G){G.selCity=null;G.selZone=null;G.zoneTargeting=false;renderAll();}
+}
+function toggleLog(open){
+  const el=$('logdrawer');if(!el)return;
+  if(open===undefined)open=!el.classList.contains('open');
+  el.classList.toggle('open',open);
+  if(open&&G){G._unread=0;updateLogBadge();}
+}
+function updateLogBadge(){
+  const b=$('logBadge');if(!b)return;
+  const n=(G&&G._unread)||0;
+  const open=$('logdrawer')&&$('logdrawer').classList.contains('open');
+  b.style.display=(n&&!open)?'block':'none';
+  b.textContent=n>9?'9+':n;
+}
+const HELP_HTML='<b>How to play:</b> tap an army figure, compose your force in the bar, press <b>Choose target</b>, then click any highlighted cell, city, or enemy army &mdash; hover previews the route; distant clicks set multi-turn march orders. Armies roam freely (foot 3 cells, cavalry 5, siege 2); attacking a defended city offers <b>Assault</b> or <b>Lay siege</b>. Units have HP and armor; wounded stacks heal each turn, fastest in your own cities. Cities recruit (tier 2-3 troops need <b>buildings</b>: Barracks, Archery Range, Stables; siege engines need a Workshop). Walls toughen garrisons and slow sieges. Coastal cities build War Galleys; holding a sea uncontested lets armies cross it. Research boosts damage 10%/level. First to hold 48 of 80 cities wins.';
+function showHelp(){showModal('How to play',HELP_HTML,[['Close',closeModal,'primary']]);}
 let _toastT=null;
 function toast(msg){
   let el=document.getElementById('toast5');
@@ -1373,7 +1412,7 @@ function loadGame(){
   initMap();
   initInput();
   if(window.innerWidth<761)$('mapwrap').classList.remove('tilted');
-  $('tiltBtn').textContent='Tilt: '+($('mapwrap').classList.contains('tilted')?'on':'off');
+  setRailLbl('tiltBtn','Tilt: '+($('mapwrap').classList.contains('tilted')?'on':'off'));
   renderAll();
   const el=$('log');
   if(el)el.innerHTML=G.log.map(l=>'<div class="l '+l.cls+'">'+l.msg+'</div>').join('');
@@ -1690,7 +1729,9 @@ function cellClick(cid){
     G.targeting=false;G.marchInfo=null;renderAll();return;
   }
   if(!(G.targeting&&G.selArmy&&G.marchInfo&&G.marchInfo.targets[cid])){
-    G.targeting=false;G.marchInfo=null;renderAll();return;
+    G.targeting=false;G.marchInfo=null;
+    G.selCity=null;closeDrawer();       // empty-map click clears the drawer, CoN style
+    renderAll();return;
   }
   const from=G.selArmy;
   const army=G.armies[from];
@@ -1746,11 +1787,15 @@ function doMarch(from,cid,want,forced){
 }
 function openArmyPanel(cid){
   const a=G.armies[cid];
-  if(!a){$('panel').innerHTML='<div class="meta">Nothing here.</div>';return;}
+  if(!a){closeDrawer();return;}
+  if(a.e===G.player&&!G.over){          // your armies live in the division card (CoN style); orders/siege rows render there
+    closeDrawer();
+    renderBar();
+    return;
+  }
   const c=cellOf(cid);
   const pv=provOf(c.p);
-  let h='<h3>'+(a.e===G.player?'Your army':empName(a.e)+' army')+'</h3>';
-  h+='<div class="meta">Near '+pv.city+' ('+empName(ownerOf(c.p))+' land)'+(a.w?' &middot; <span style="color:var(--danger)">winded</span>':'')+'</div>';
+  let h='<div class="meta">Near '+pv.city+' ('+empName(ownerOf(c.p))+' land)'+(a.w?' &middot; <span style="color:var(--danger)">winded</span>':'')+'</div>';
   h+='<table class="utable">';
   UKEYS.forEach(t=>{
     if(!a.u[t])return;
@@ -1759,34 +1804,39 @@ function openArmyPanel(cid){
     h+='<tr><td>'+uicon(t)+UNITS[t].name+'</td><td>'+a.u[t]+(pct<100?' <span style="color:'+(pct<50?'#c94040':'#c9a227')+'">'+pct+'%</span>':'')+'</td></tr>';
   });
   h+='<tr><td><b>Total</b></td><td><b>'+cnt(a.u)+'</b></td></tr></table>';
-  if(a.e===G.player&&!G.over){
-    if(a.siege){
-      const sgar=G.armies[a.siege];
-      h+='<div class="meta">Besieging <b>'+provOf(cellOf(a.siege).p).city+'</b> &middot; garrison: '+(sgar?cnt(sgar.u):0)+' &middot; they starve each turn. Moving this army lifts the siege.</div>';
-      h+='<button style="width:100%;margin-top:4px" onclick="doLiftSiege(\''+cid+'\')">Lift siege (stay put, stop besieging)</button>';
-    }
-    if(a.ord){
-      const eta=orderEtaTurns(cid);
-      h+='<div class="meta">On the march to <b>'+provOf(cellOf(a.ord).p).city+'</b>'+(eta?' &middot; arrives in '+eta+' turn'+(eta>1?'s':''):'')+'.</div>';
-      h+='<button style="width:100%;margin-top:4px" onclick="cancelOrder(\''+cid+'\')">Cancel march order</button>';
-    }
-    h+='<div class="meta" style="margin-top:6px">Compose your force in the bar, press Choose target, then click a nearby cell to march or a distant one to set a multi-turn order.</div>';
-    if(G.targeting)h+='<div class="meta">Click a highlighted cell to march now, or any reachable cell to set an order.</div>';
-  }
   $('panel').innerHTML=h;
-  $('side').classList.remove('mlog');
-  document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('on',b.id==='tabProv'));
+  showDrawer(empName(a.e)+' army');
 }
+function setCityTab(tab){G.cityTab=tab;if(G.selCity)openCityPanel(G.selCity);}
 function openCityPanel(pid){
   const pv=provOf(pid);
   const own=ownerOf(pid);
   const mine=own===G.player;
   const e=G.emp[G.player];
   const gar=G.armies[pv.citycell];
-  let h='<h3>'+(pv.cap?'&#9733; ':'')+pv.city+'</h3>';
-  h+='<div class="meta">'+empName(own)+' &middot; '+(pv.inc*((pv.cap&&homeEmpOf(pv)===own)?2:1))+' gold/turn &middot; '+pv.cells.length+' lands'+(pv.cap?' &middot; capital':'')+'</div>';
-  h+='<div class="meta">Garrison: '+(gar?cnt(gar.u)+' troops ('+empName(gar.e)+')':'none &mdash; undefended!')+'</div>';
+  const tab=mine?(G.cityTab||'ov'):'ov';
+  let h='';
   if(mine&&!G.over){
+    h+='<div class="dtabs">';
+    [['ov','Overview'],['rec','Recruit'],['bld','Buildings']].forEach(x=>{
+      h+='<button class="'+(tab===x[0]?'on':'')+'" onclick="setCityTab(\''+x[0]+'\')">'+x[1]+'</button>';
+    });
+    h+='</div>';
+  }
+  if(tab==='ov'||!mine){
+    h+='<div class="meta">'+empName(own)+' &middot; '+(pv.inc*((pv.cap&&homeEmpOf(pv)===own)?2:1)+3*bldLv(pid,'market'))+' gold/turn &middot; '+pv.cells.length+' lands'+(pv.cap?' &middot; capital':'')+'</div>';
+    h+='<div class="meta">Garrison: '+(gar?cnt(gar.u)+' troops ('+empName(gar.e)+')':'none &mdash; undefended!')+'</div>';
+    const blds=BKEYS.filter(b=>bldLv(pid,b)).map(b=>BLD[b].name+' L'+bldLv(pid,b));
+    h+='<div class="meta">Buildings: '+(blds.length?blds.join(', '):'none')+'</div>';
+    const q0=(G.buildQ||{})[pid];
+    if(q0)h+='<div class="meta">&#128296; '+BLD[q0.b].name+' ready in '+q0.left+' turn'+(q0.left>1?'s':'')+'.</div>';
+    if(mine&&!G.over){
+      (pv.zones||[]).forEach(z=>{
+        h+='<div class="buildrow"><span>'+uicon('ship')+SHIP.name+' &rarr; '+ZONES[z].name+' &mdash; '+SHIP.cost+'g</span><button '+(e.gold<SHIP.cost?'disabled':'')+' onclick="buyGalley5(\''+pid+'\',\''+z+'\')">Buy</button></div>';
+      });
+    }
+  }
+  if(mine&&!G.over&&tab==='rec'){
     const rc=recruitedThisTurn(pid);
     const capped=rc>=RECRUIT_CAP;
     const capT=RECRUIT_CAP+2*bldLv(pid,'granary');
@@ -1806,8 +1856,8 @@ function openCityPanel(pid){
       });
       if(nextLock)h+=nextLock;
     }
-    // ---- buildings ----
-    h+='<h3 style="font-size:14px">Buildings</h3>';
+  }
+  if(mine&&!G.over&&tab==='bld'){
     const q=(G.buildQ||{})[pid];
     if(q)h+='<div class="meta">&#128296; '+BLD[q.b].name+' &mdash; ready in '+q.left+' turn'+(q.left>1?'s':'')+'.</div>';
     BKEYS.forEach(b=>{
@@ -1819,13 +1869,9 @@ function openCityPanel(pid){
       h+='</div>';
     });
     h+='<div class="meta">One project per city &middot; '+BLD.barracks.turns+' turns each. Hover a building for its effect.</div>';
-    (pv.zones||[]).forEach(z=>{
-      h+='<div class="buildrow"><span>'+uicon('ship')+SHIP.name+' &rarr; '+ZONES[z].name+' &mdash; '+SHIP.cost+'g</span><button '+(e.gold<SHIP.cost?'disabled':'')+' onclick="buyGalley5(\''+pid+'\',\''+z+'\')">Buy</button></div>';
-    });
   }
   $('panel').innerHTML=h;
-  $('side').classList.remove('mlog');
-  document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('on',b.id==='tabProv'));
+  showDrawer((pv.cap?'&#9733; ':'')+pv.city);
 }
 function renderBar(){
   const bar=$('abar');
@@ -1869,6 +1915,14 @@ function renderBar(){
   h+='<button '+(G.forced?'class="primary"':'')+' onclick="toggleForced()" title="+2 cells, arrive winded (-20% until next turn)">Forced march</button>';
   h+='<button class="primary" onclick="startTargeting()">'+(G.targeting?'Click a target...':'Choose target')+'</button></div>';
   h+='</div>';
+  if(a.siege){                          // CoN-style status rows inside the division card
+    const sgar=G.armies[a.siege];
+    h+='<div class="dcRow">&#9876; Besieging <b>'+provOf(cellOf(a.siege).p).city+'</b> &middot; garrison '+(sgar?cnt(sgar.u):0)+' starving &middot; moving lifts the siege<button onclick="doLiftSiege(\''+G.selArmy+'\')">Lift siege</button></div>';
+  }
+  if(a.ord){
+    const eta=orderEtaTurns(G.selArmy);
+    h+='<div class="dcRow">&#8674; Marching to <b>'+provOf(cellOf(a.ord).p).city+'</b>'+(eta?' &middot; arrives in '+eta+' turn'+(eta>1?'s':''):'')+'<button onclick="cancelOrder(\''+G.selArmy+'\')">Cancel</button></div>';
+  }
   bar.innerHTML=h;
   bar.style.display='block';
 }
@@ -2047,8 +2101,7 @@ function openZonePanel(z){
     });
   }
   $('panel').innerHTML=h;
-  $('side').classList.remove('mlog');
-  document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('on',b.id==='tabProv'));
+  showDrawer('Sea zone');
 }
 function startZoneTargeting(){
   G.zoneTargeting=true;
@@ -2151,11 +2204,7 @@ function initInput(){
   $('tiltBtn').onclick=()=>{
     const w=$('mapwrap');
     w.classList.toggle('tilted');
-    $('tiltBtn').textContent='Tilt: '+(w.classList.contains('tilted')?'on':'off');
-  };
-  $('collapseBtn').onclick=()=>{
-    $('main').classList.toggle('nopanel');
-    $('collapseBtn').textContent=$('main').classList.contains('nopanel')?'Panels: off':'Panels: on';
+    setRailLbl('tiltBtn','Tilt: '+(w.classList.contains('tilted')?'on':'off'));
   };
 }
 
@@ -2223,7 +2272,7 @@ function buildStart(){
     buildCadj();
     initMap();
     initInput();
-    if(window.innerWidth<761){$('mapwrap').classList.remove('tilted');$('tiltBtn').textContent='Tilt: off';}
+    if(window.innerWidth<761){$('mapwrap').classList.remove('tilted');setRailLbl('tiltBtn','Tilt: off');}
     renderAll();
     saveGame();
     const cap=provOf(EMPIRES[selEmpire].cap);
@@ -2249,11 +2298,11 @@ function refreshStart(){
 $('endTurn').addEventListener('click',endTurn);
 $('unitsBtn').addEventListener('click',showUnitCards);
 $('techBtn').addEventListener('click',showTech);
-$('animBtn').addEventListener('click',()=>{ANIM_ON=!ANIM_ON;$('animBtn').textContent='Anim: '+(ANIM_ON?'on':'off');});
+$('animBtn').addEventListener('click',()=>{ANIM_ON=!ANIM_ON;setRailLbl('animBtn','Anim: '+(ANIM_ON?'on':'off'));});
 $('expBtn').addEventListener('click',exportSave);
+$('logBtn').addEventListener('click',()=>toggleLog());
+$('helpBtn').addEventListener('click',showHelp);
 $('impBtn').addEventListener('click',importSave);
-$('tabProv').addEventListener('click',()=>{$('side').classList.remove('mlog');document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('on',b.id==='tabProv'));});
-$('tabLog').addEventListener('click',()=>{$('side').classList.add('mlog');document.querySelectorAll('#mtabs button').forEach(b=>b.classList.toggle('on',b.id==='tabLog'));});
 buildStart();
 try{
   const sv=JSON.parse(localStorage.getItem('aoc5save'));
