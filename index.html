@@ -269,11 +269,23 @@ for(const k in UNITS){                     // derive counters + ranged from the 
 const UKEYS=Object.keys(UNITS);
 function trackOf(t){return UNITS[t]?UNITS[t].track:t;}
 function beatsUnit(a,b){return TRACKS[trackOf(a)].beats.includes(trackOf(b));}
-function tierUnlocked(owner,t){            // 3a interim gating: tier 2 needs track tech L1, tier 3 needs L2 (buildings take over in 3b)
+function tierUnlocked(owner,t){            // legacy helper (AI/codex fallback); real gating is per-city buildings — see canRecruit
   const u=UNITS[t];
   if(u.tier<=1)return true;
   return techLvOf(owner,TRACKS[u.track].tech)>=(u.tier-1);
 }
+// ---- city buildings (pass 3b) ----
+const BLD={
+ barracks:{name:'Barracks',icon:'sword',tracks:['spear','sword'],cost:[40,80],turns:2,max:2,desc:'L1 unlocks tier-2 spears & swords, L2 unlocks tier 3'},
+ range:{name:'Archery Range',icon:'longbow',tracks:['longbow','crossbow'],cost:[40,80],turns:2,max:2,desc:'L1 unlocks tier-2 bows & crossbows, L2 unlocks tier 3'},
+ stables:{name:'Stables',icon:'cavalry',tracks:['cavalry'],cost:[50,100],turns:2,max:2,desc:'L1 unlocks tier-2 horse, L2 unlocks Knights'},
+ workshop:{name:'Siege Workshop',icon:'catapult',tracks:['catapult'],cost:[60,120],turns:2,max:2,desc:'Required for any siege units; L2 unlocks Trebuchets'},
+ walls:{name:'Walls',icon:'spear',cost:[60,120,220],turns:2,max:3,desc:'+15% garrison defense per level; the garrison starves slower under siege'},
+ market:{name:'Market',icon:'ship',cost:[50,100],turns:2,max:2,desc:'+3 gold per turn per level'},
+ granary:{name:'Granary',icon:'spear',cost:[60],turns:2,max:1,desc:'+2 recruits per turn in this city'}
+};
+const BKEYS=Object.keys(BLD);
+const SIEGE_ATTR=[0.22,0.16,0.11,0.07];    // garrison starvation per turn by wall level
 
 const EMPIRES={
  eng:{name:'Kingdom of England',color:'#c94040',cap:'bri0',region:'Britain'},
@@ -520,13 +532,55 @@ function incomeOf(e){
   provsOf(e).forEach(pid=>{
     const pv=provOf(pid);
     s+=pv.inc*((pv.cap&&homeEmpOf(pv)===e)?2:1);
+    s+=3*bldLv(pid,'market');
   });
   return Math.round(s+cellsOf(e).length*0.15);
+}
+// ---- buildings (pass 3b) ----
+function bldLv(pid,b){return (G.bld&&G.bld[pid]&&G.bld[pid][b])||0;}
+function canRecruit(pid,t){
+  const u=UNITS[t],tk=u.track;
+  if(tk==='catapult')return bldLv(pid,'workshop')>=(u.tier>=3?2:1);  // no siege units without a workshop
+  if(u.tier<=1)return true;
+  const b=(tk==='spear'||tk==='sword')?'barracks':(tk==='cavalry'?'stables':'range');
+  return bldLv(pid,b)>=u.tier-1;
+}
+function recruitGateText(pid,t){
+  const u=UNITS[t],tk=u.track;
+  if(tk==='catapult')return BLD.workshop.name+' L'+(u.tier>=3?2:1);
+  const b=(tk==='spear'||tk==='sword')?'barracks':(tk==='cavalry'?'stables':'range');
+  return BLD[b].name+' L'+(u.tier-1);
+}
+function startBuild(pid,b,empKey){
+  const e=G.emp[empKey];
+  const lv=bldLv(pid,b);
+  if(!e||ownerOf(pid)!==empKey||lv>=BLD[b].max)return false;
+  G.buildQ=G.buildQ||{};
+  if(G.buildQ[pid])return false;                    // one project per city
+  const cost=BLD[b].cost[lv];
+  if(e.gold<cost)return false;
+  e.gold-=cost;
+  G.buildQ[pid]={b,left:BLD[b].turns};
+  return true;
+}
+function processBuilds(empKey){
+  G.buildQ=G.buildQ||{};G.bld=G.bld||{};
+  for(const pid in G.buildQ){
+    if(ownerOf(pid)!==empKey)continue;
+    const q=G.buildQ[pid];
+    q.left--;
+    if(q.left<=0){
+      G.bld[pid]=G.bld[pid]||{};
+      G.bld[pid][q.b]=(G.bld[pid][q.b]||0)+1;
+      if(empKey===G.player)log('The '+BLD[q.b].name+(G.bld[pid][q.b]>1?' (L'+G.bld[pid][q.b]+')':'')+' of <b>'+provOf(pid).city+'</b> is complete.','');
+      delete G.buildQ[pid];
+    }
+  }
 }
 function newGame(playerKey,rivalKeys,diff){
   G={turn:1,player:playerKey,emp:{},cellOwner:{},armies:{},log:[],selArmy:null,selCity:null,selZone:null,
      targeting:false,marchInfo:null,send:{},forced:false,over:false,diff:diff||'norm',animQ:[],
-     fleets:{},fmoved:{},fhalf:{},zoneTargeting:false};
+     fleets:{},fmoved:{},fhalf:{},zoneTargeting:false,bld:{},buildQ:{},rec:{}};
   const persPool=['agg','bld','opp'];
   const players=[playerKey,...rivalKeys];
   players.forEach(k=>{
@@ -547,6 +601,9 @@ function newGame(playerKey,rivalKeys,diff){
       G.armies[pv.citycell]={e:'neutral',u:rich?{spear:4,sword:2,longbow:1}:{spear:3,sword:1},mv:0,w:0};
     }
   }
+  players.forEach(k=>{                    // every capital starts with the basic war buildings
+    G.bld[EMPIRES[k].cap]={barracks:1,range:1,stables:1};
+  });
   players.forEach(k=>{
     const capP=provOf(EMPIRES[k].cap);
     const zs=capP.zones||[];
@@ -733,7 +790,10 @@ function battle5(fromCell,toCell,force,attackerKey,opts){
   let aMult=(1-0.2*awf)*rand(0.9,1.1);
   if(isCap)aMult*=1+0.05*techLvOf(attackerKey,'siege');
   let dMult=rand(0.9,1.1)*(1-0.2*(def.w?1:0));
-  if(isCityCell&&ownerOf(cell.p)===def.e)dMult*=1.5;   // own-city garrison: 1.2 base + 25% protection
+  if(isCityCell&&ownerOf(cell.p)===def.e){
+    dMult*=1.5;                                        // own-city garrison: 1.2 base + 25% protection
+    dMult*=1+0.15*bldLv(cell.p,'walls');               // walls: +15% per level
+  }
   if(isCap)dMult*=1.15;
   // volley phase: ranged units on both sides strike first (35% of their damage, before losses)
   const av=dmgOutput(att.u,def.u,attackerKey,'ranged')*0.35*aMult;
@@ -838,8 +898,9 @@ function recruitedThisTurn(pid){G.rec=G.rec||{};return G.rec[pid]||0;}
 function buyUnit5(pid,t){
   const e=G.emp[G.player];
   if(ownerOf(pid)!==G.player||e.gold<UNITS[t].cost)return;
-  if(!tierUnlocked(G.player,t)){toast(UNITS[t].name+' need '+TECH[TRACKS[UNITS[t].track].tech].name+' level '+(UNITS[t].tier-1)+' — research it in the Tech tree.');return;}
-  if(recruitedThisTurn(pid)>=RECRUIT_CAP){toast('This city has already mustered '+RECRUIT_CAP+' recruits this turn.');return;}
+  if(!canRecruit(pid,t)){toast(UNITS[t].name+' need a '+recruitGateText(pid,t)+' in this city — build it below.');return;}
+  const cap=RECRUIT_CAP+2*bldLv(pid,'granary');
+  if(recruitedThisTurn(pid)>=cap){toast('This city has already mustered '+cap+' recruits this turn.');return;}
   G.rec[pid]=(G.rec[pid]||0)+1;
   e.gold-=UNITS[t].cost;
   const f={};f[t]=1;
@@ -928,11 +989,13 @@ function resolveSieges(e){
     const cityCell=a.siege;
     if(!CADJ[cid].includes(cityCell)||cellOwnerOf(cityCell)===e){delete a.siege;continue;}
     const gar=G.armies[cityCell];
-    const cityName=provOf(cellOf(cityCell).p).city;
+    const pid5=cellOf(cityCell).p;
+    const cityName=provOf(pid5).city;
     if(gar&&cnt(gar.u)){
-      const loss=Math.max(1,Math.ceil(cnt(gar.u)*0.22));
+      const rate=SIEGE_ATTR[Math.min(bldLv(pid5,'walls'),SIEGE_ATTR.length-1)];   // walls slow the starvation
+      const loss=Math.max(1,Math.ceil(cnt(gar.u)*rate));
       removeUnits(gar.u,loss);
-      log(empName(e)+"'s siege grinds down <b>"+cityName+'</b> ('+loss+' lost, '+cnt(gar.u)+' hold out).','');
+      log(empName(e)+"'s siege grinds down <b>"+cityName+'</b> ('+loss+' lost, '+cnt(gar.u)+' hold out'+(bldLv(pid5,'walls')?', walls hold':'')+').','');
     }
     const g2=G.armies[cityCell];
     if(!g2||!cnt(g2.u)){                    // garrison broken -> besiegers storm in and take the city
@@ -940,6 +1003,10 @@ function resolveSieges(e){
       const force=takeForce5(cid,a.u);
       if(G.animQ)G.animQ.push({from:cid,to:cityCell,e,t:domType(force)});
       placeArmy(cityCell,e,force,99,false,G._takenD);
+      if(bldLv(pid5,'walls')>0){            // a starved city falls hard: its walls lose a level
+        G.bld[pid5].walls--;
+        log('The walls of <b>'+cityName+'</b> are torn down a level in the sack.','');
+      }
       log(empName(e)+' storms the starved gates of <b>'+cityName+'</b>.','');
     }
   }
@@ -1028,6 +1095,7 @@ function aiTurn(k){
   const D=DIFFS[G.diff||'norm'];
   resolveSieges(k);
   healArmies(k);
+  processBuilds(k);
   armiesOf(k).forEach(c=>{if(G.armies[c])G.armies[c].w=0,G.armies[c].mv=0;});
   e.gold+=Math.round(incomeOf(k)*D.inc);
   const reserve=P.reserve+D.res;
@@ -1040,18 +1108,38 @@ function aiTurn(k){
     }
   }
   const myProvs=provsOf(k);
+  // build: up to 2 cities without a project start a useful upgrade
+  let built=0;
+  for(const pid of myProvs){
+    if(built>=2)break;
+    if(G.buildQ&&G.buildQ[pid])continue;
+    if(Math.random()>0.45)continue;
+    const prefs2=e.pers==='bld'?['market','walls','barracks','range','stables','workshop','granary']
+                :e.pers==='agg'?['stables','barracks','workshop','range','walls','market','granary']
+                :['barracks','range','market','stables','walls','workshop','granary'];
+    for(const b of prefs2){
+      const lv=bldLv(pid,b);
+      if(lv>=BLD[b].max)continue;
+      const cost=BLD[b].cost[lv];
+      if(e.gold>=cost+reserve+30){if(startBuild(pid,b,k)){built++;}break;}
+    }
+  }
   let budget=Math.max(0,Math.round((e.gold-reserve)*D.spend));
   let guard=0;
   while(budget>=7&&e.gold>=7&&myProvs.length&&guard++<60){
     let t=pickWeighted(P.mix,Math.min(budget,e.gold));
     if(!t)break;
-    // upgrade to the best unlocked, affordable tier in the same track
+    const pid=pick(myProvs);
+    // best tier this CITY can actually train (building-gated), affordable
     const tk=trackOf(t);
-    const options=UKEYS.filter(x=>UNITS[x].track===tk&&tierUnlocked(k,x)&&UNITS[x].cost<=Math.min(budget,e.gold))
+    const options=UKEYS.filter(x=>UNITS[x].track===tk&&canRecruit(pid,x)&&UNITS[x].cost<=Math.min(budget,e.gold))
       .sort((a,b)=>UNITS[b].tier-UNITS[a].tier);
     if(options.length)t=options[0];
-    else if(!tierUnlocked(k,t)||UNITS[t].cost>Math.min(budget,e.gold))break;
-    const pid=pick(myProvs);
+    else{                                  // this track is gated here — fall back to any tier-1 it can train
+      const any=UKEYS.filter(x=>UNITS[x].tier===1&&canRecruit(pid,x)&&UNITS[x].cost<=Math.min(budget,e.gold));
+      if(!any.length){budget-=5;continue;}
+      t=pick(any);
+    }
     e.gold-=UNITS[t].cost;budget-=UNITS[t].cost;
     const f={};f[t]=1;
     placeArmy(provOf(pid).citycell,k,f,99,false);
@@ -1277,6 +1365,8 @@ function loadGame(){
     delete G.provOwner;
   }
   G.animQ=[];G.selArmy=null;G.selCity=null;G.selZone=null;G.targeting=false;G.marchInfo=null;G.send={};G.forced=false;
+  G.bld=G.bld||{};G.buildQ=G.buildQ||{};G.rec=G.rec||{};   // pre-3b saves gain building state
+  if(!Object.keys(G.bld).length){for(const k in G.emp)if(EMPIRES[k])G.bld[EMPIRES[k].cap]={barracks:1,range:1,stables:1};}
   buildCadj();
   $('start').style.display='none';
   $('game').style.display='flex';
@@ -1525,12 +1615,12 @@ function showUnitCards(){
     h+='<h3 style="margin:8px 0 4px">'+TRACKS[tk].name+(TRACKS[tk].ranged?' (ranged)':'')+'</h3><div class="ucards">';
     UKEYS.filter(t=>UNITS[t].track===tk).sort((a,b)=>UNITS[a].tier-UNITS[b].tier).forEach(t=>{
       const u=UNITS[t];
-      const unlocked=tierUnlocked(G&&G.player,t);
-      h+='<div class="ucard"'+(unlocked?'':' style="opacity:0.55"')+'>'+artSvg(t,44,'#c9a227')+'<h4>'+u.name+'</h4>';
+      const gated=u.tier>1||tk==='catapult';
+      h+='<div class="ucard">'+artSvg(t,44,'#c9a227')+'<h4>'+u.name+'</h4>';
       h+='<div class="stats">Tier '+u.tier+' &middot; '+u.cost+'g &middot; dmg '+u.dmg+' &middot; HP '+u.hp+' &middot; armor '+u.armor+'</div>';
       h+='<div class="vs">Beats: '+u.beats.map(b=>uicon(b,'#5aa858')).join('')+'</div>';
       h+='<div class="vs">Beaten by: '+Object.keys(TRACKS).filter(e=>TRACKS[e].beats.includes(tk)).map(b=>uicon(b,'#c94040')).join('')+'</div>';
-      if(!unlocked)h+='<div class="stats" style="color:#c94040">Needs '+TECH[TRACKS[tk].tech].name+' L'+(u.tier-1)+'</div>';
+      if(gated)h+='<div class="stats" style="color:#c9a227">Trained in cities with '+recruitGateText(null,t)+'</div>';
       h+='<div class="flav">'+(FLAVOR[t]||FLAVOR[tk]||'')+'</div></div>';
     });
     h+='</div>';
@@ -1699,21 +1789,36 @@ function openCityPanel(pid){
   if(mine&&!G.over){
     const rc=recruitedThisTurn(pid);
     const capped=rc>=RECRUIT_CAP;
+    const capT=RECRUIT_CAP+2*bldLv(pid,'granary');
+    const cappedT=rc>=capT;
     h+='<h3 style="font-size:14px">Recruit (joins the garrison, acts next turn)</h3>';
-    h+='<div class="meta">Mustered this turn: '+rc+'/'+RECRUIT_CAP+(capped?' &mdash; the barracks are full until next turn':'')+'</div>';
-    for(const tk in TRACKS){                    // one row per unlocked unit, grouped by track; next tier shown as a locked hint
+    h+='<div class="meta">Mustered this turn: '+rc+'/'+capT+(cappedT?' &mdash; the muster is full until next turn':'')+'</div>';
+    for(const tk in TRACKS){                    // one row per trainable unit here, grouped by track; next tier shown as a locked hint
       const tiers=UKEYS.filter(t=>UNITS[t].track===tk).sort((a,b)=>UNITS[a].tier-UNITS[b].tier);
       let nextLock=null;
       tiers.forEach(t=>{
         const u=UNITS[t];
-        if(tierUnlocked(G.player,t)){
-          h+='<div class="buildrow"><span>'+uicon(t)+u.name+' &mdash; '+u.cost+'g <span style="opacity:0.7">d'+u.dmg+' h'+u.hp+' a'+u.armor+'</span></span><button '+((e.gold<u.cost||capped)?'disabled':'')+' onclick="buyUnit5(\''+pid+'\',\''+t+'\')">Buy</button></div>';
+        if(canRecruit(pid,t)){
+          h+='<div class="buildrow"><span>'+uicon(t)+u.name+' &mdash; '+u.cost+'g <span style="opacity:0.7">d'+u.dmg+' h'+u.hp+' a'+u.armor+'</span></span><button '+((e.gold<u.cost||cappedT)?'disabled':'')+' onclick="buyUnit5(\''+pid+'\',\''+t+'\')">Buy</button></div>';
         }else if(!nextLock){
-          nextLock='<div class="meta" style="padding-left:4px">&#128274; '+u.name+' &mdash; needs '+TECH[TRACKS[tk].tech].name+' L'+(u.tier-1)+'</div>';
+          nextLock='<div class="meta" style="padding-left:4px">&#128274; '+u.name+' &mdash; needs '+recruitGateText(pid,t)+'</div>';
         }
       });
       if(nextLock)h+=nextLock;
     }
+    // ---- buildings ----
+    h+='<h3 style="font-size:14px">Buildings</h3>';
+    const q=(G.buildQ||{})[pid];
+    if(q)h+='<div class="meta">&#128296; '+BLD[q.b].name+' &mdash; ready in '+q.left+' turn'+(q.left>1?'s':'')+'.</div>';
+    BKEYS.forEach(b=>{
+      const lv=bldLv(pid,b);
+      const maxed=lv>=BLD[b].max;
+      const cost=maxed?null:BLD[b].cost[lv];
+      h+='<div class="buildrow"><span title="'+BLD[b].desc+'">'+BLD[b].name+' '+(lv?'L'+lv:'&mdash;')+(maxed?' (max)':'')+'</span>';
+      if(!maxed)h+='<button '+((e.gold<cost||q)?'disabled':'')+' onclick="doBuild(\''+pid+'\',\''+b+'\')">'+(lv?'Upgrade':'Build')+' '+cost+'g</button>';
+      h+='</div>';
+    });
+    h+='<div class="meta">One project per city &middot; '+BLD.barracks.turns+' turns each. Hover a building for its effect.</div>';
     (pv.zones||[]).forEach(z=>{
       h+='<div class="buildrow"><span>'+uicon('ship')+SHIP.name+' &rarr; '+ZONES[z].name+' &mdash; '+SHIP.cost+'g</span><button '+(e.gold<SHIP.cost?'disabled':'')+' onclick="buyGalley5(\''+pid+'\',\''+z+'\')">Buy</button></div>';
     });
@@ -1857,6 +1962,7 @@ function endTurn(){
       resolveSieges(G.player);
       advanceOrders(G.player);
       healArmies(G.player);            // wounds mend: cities 50%, own land 25%, abroad 10%
+      processBuilds(G.player);         // construction advances
       G.rec={};                        // fresh recruit cap each turn
       G.emp[G.player].gold+=incomeOf(G.player);
       log('Turn '+G.turn+' — your coffers grow by '+incomeOf(G.player)+' gold.','turnmark');
@@ -1896,6 +2002,13 @@ function doSiege(from,cid,want){
 }
 
 function doLiftSiege(cid){ liftSiege(cid); renderAll(); openArmyPanel(cid); saveGame(); }
+
+function doBuild(pid,b){
+  if(startBuild(pid,b,G.player)){
+    log('Construction of the '+BLD[b].name+' begins in <b>'+provOf(pid).city+'</b>.','');
+    renderHdr();openCityPanel(pid);saveGame();
+  }else toast('Cannot start that project right now.');
+}
 
 // ==== seg_zonefns.js ====
 function zoneClick(z){
