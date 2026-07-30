@@ -91,12 +91,13 @@ h1,h2,h3{font-weight:normal}
 .steprow{display:flex;align-items:center;justify-content:space-between;font-size:13px;margin:3px 0}
 .steprow input{width:52px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-family:inherit}
 /* map styling */
-.cell{stroke:#9a8c72;stroke-width:0.45;cursor:pointer}
+.cell{stroke:#9a8c72;stroke-width:0.3;stroke-opacity:0.55;cursor:pointer}
 .cell.target{stroke:var(--gold);stroke-width:1.6;stroke-dasharray:3 2.4}
 .cell.pathhl{stroke:#fffbe8;stroke-width:1.8}
 .cell.occupied{stroke:#6e5a3a;stroke-width:0.9;stroke-dasharray:2.4 1.8}
 .cell.atwar{stroke:#a33636;stroke-width:0.8}
-.provline{stroke:#3f3221;stroke-width:1.1}
+.provline{stroke:#3a2d1c;stroke-width:1.5;stroke-linejoin:round}
+.provhalo{stroke:#f0e6cd;stroke-width:3.6;stroke-linejoin:round;opacity:0.5}
 .armyfig{cursor:pointer}
 .searoute{fill:none;stroke:#5d7d8a;stroke-width:2;stroke-dasharray:7 6;opacity:.8;pointer-events:none}
 .searoute.target{stroke:var(--gold);stroke-width:3;opacity:1}
@@ -1680,6 +1681,45 @@ function tint(e){
   if(G&&G.player&&e!==G.player&&atWar(G.player,e))return blend(base,'#c94040',0.42);  // enemy land burns red (CoN style)
   return base;
 }
+// ---- map geometry helpers (pass 4c) ----
+function hexPath(cx,cy,r){                 // flat-top hexagon, CoN-style city marker
+  let d='';
+  for(let i=0;i<6;i++){
+    const a=Math.PI/180*(60*i);
+    const x=cx+r*Math.cos(a), y=cy+r*Math.sin(a);
+    d+=(i?'L':'M')+x.toFixed(2)+' '+y.toFixed(2)+' ';
+  }
+  return d+'Z';
+}
+function smoothPath(pts){                  // Catmull-Rom through the points, emitted as beziers
+  if(pts.length<2)return '';
+  if(pts.length===2)return 'M'+pts[0][0]+' '+pts[0][1]+' L'+pts[1][0]+' '+pts[1][1];
+  let d='M'+pts[0][0].toFixed(1)+' '+pts[0][1].toFixed(1);
+  for(let i=0;i<pts.length-1;i++){
+    const p0=pts[i-1]||pts[i], p1=pts[i], p2=pts[i+1], p3=pts[i+2]||pts[i+1];
+    const c1x=p1[0]+(p2[0]-p0[0])/6, c1y=p1[1]+(p2[1]-p0[1])/6;
+    const c2x=p2[0]-(p3[0]-p1[0])/6, c2y=p2[1]-(p3[1]-p1[1])/6;
+    d+=' C'+c1x.toFixed(1)+' '+c1y.toFixed(1)+' '+c2x.toFixed(1)+' '+c2y.toFixed(1)+' '+p2[0].toFixed(1)+' '+p2[1].toFixed(1);
+  }
+  return d;
+}
+function cellChain(fromCell,toCell,maxLen){ // shortest hop chain, ignoring who holds the ground
+  const dist={};dist[fromCell]=0;const parent={};const q=[fromCell];
+  while(q.length){
+    const cur=q.shift();
+    if(cur===toCell){
+      const out=[toCell];let c=toCell,guard=0;
+      while(c!==fromCell&&guard++<40){c=parent[c];if(c===undefined)return null;out.unshift(c);}
+      return out;
+    }
+    if(dist[cur]>=maxLen)continue;
+    for(const nk of (CADJ[cur]||[])){
+      if(nk in dist)continue;
+      dist[nk]=dist[cur]+1;parent[nk]=cur;q.push(nk);
+    }
+  }
+  return null;
+}
 let ROADS=null;
 function buildRoads(){
   if(ROADS)return;
@@ -1694,7 +1734,19 @@ function buildRoads(){
       const key=pa<pb?pa+'|'+pb:pb+'|'+pa;
       if(seen[key])continue;seen[key]=1;
       const A=provOf(pa),B=provOf(pb);
-      ROADS.push([A.cx,A.cy,B.cx,B.cy]);
+      // a road follows the land: hop cell to cell between the two cities, then smooth it
+      const chain=cellChain(A.citycell,B.citycell,7);
+      let pts;
+      if(chain&&chain.length>2){
+        pts=chain.map(c=>[MAPD5.cells[c].x,MAPD5.cells[c].y]);
+        pts[0]=[A.cx,A.cy];pts[pts.length-1]=[B.cx,B.cy];
+      }else{
+        const mx=(A.cx+B.cx)/2, my=(A.cy+B.cy)/2;
+        const dx=B.cx-A.cx, dy=B.cy-A.cy;
+        const h=((pa.charCodeAt(0)+pb.charCodeAt(1)+pa.length)%7-3)/22;   // deterministic gentle bend
+        pts=[[A.cx,A.cy],[mx-dy*h,my+dx*h],[B.cx,B.cy]];
+      }
+      ROADS.push(smoothPath(pts));
     }
   }
 }
@@ -1792,15 +1844,13 @@ function initMap(){
   svg.appendChild(gCell);svg.appendChild(gOut);svg.appendChild(gTer);svg.appendChild(gRoad);svg.appendChild(gPin);svg.appendChild(gArmy);svg.appendChild(gZone);
   buildRoads();
   let rh='';
-  ROADS.forEach(r=>{ rh+='<line x1="'+r[0]+'" y1="'+r[1]+'" x2="'+r[2]+'" y2="'+r[3]+'" stroke="#8a6f4a" stroke-width="1.1" opacity="0.55"/>'; });
+  // dirt casing under every road, then the lighter track on top — reads like a worn road, not a ruled line
+  ROADS.forEach(d=>{ rh+='<path d="'+d+'" fill="none" stroke="#6b573a" stroke-width="2.6" stroke-linecap="round" opacity="0.35"/>'; });
+  ROADS.forEach(d=>{ rh+='<path d="'+d+'" fill="none" stroke="#a98d63" stroke-width="1.15" stroke-linecap="round" opacity="0.75"/>'; });
   for(const cid in MAPD5.cells){   // every tile shows its centre point (that's what an army must reach to claim it)
     const c=MAPD5.cells[cid];
     if(c.city)continue;
-    rh+='<circle cx="'+c.x+'" cy="'+c.y+'" r="1.5" fill="#7a684a" opacity="0.5"/>';
-  }
-  for(const pid in MAPD5.provs){  // CoN-style road nodes at every province centre
-    const pv=MAPD5.provs[pid];
-    rh+='<rect x="'+(pv.cx-2.2)+'" y="'+(pv.cy-2.2)+'" width="4.4" height="4.4" fill="#8a6f4a" stroke="#241d17" stroke-width="0.6" opacity="0.8"/>';
+    rh+='<circle cx="'+c.x+'" cy="'+c.y+'" r="1.4" fill="#7a684a" opacity="0.45"/>';
   }
   gRoad.innerHTML=rh;
   for(const cid in MAPD5.cells){
@@ -1808,9 +1858,12 @@ function initMap(){
     el.setAttribute('fill-rule','evenodd');
     gCell.appendChild(el);
   }
-  for(const pid in MAPD5.provs){
+  for(const pid in MAPD5.provs){          // double-stroked province borders: pale casing under a dark line
     const o=provOf(pid).outline;
-    if(o)gOut.appendChild(mk('path',{d:o,'class':'provline','fill':'none'}));
+    if(o){
+      gOut.appendChild(mk('path',{d:o,'class':'provhalo','fill':'none'}));
+      gOut.appendChild(mk('path',{d:o,'class':'provline','fill':'none'}));
+    }
   }
   TERRAIN.forEach(t=>{
     gTer.appendChild(mk('rect',{x:t[0],y:t[1],width:t[2],height:t[3],rx:45,fill:t[4],opacity:t[5],'pointer-events':'none'}));
@@ -1853,11 +1906,15 @@ function updateMap(){
     ph+='<circle cx="'+pv.cx+'" cy="'+pv.cy+'" r="'+(15*s)+'" fill="transparent"/>';
     if(selc){
       const rr=17*s;
-      ph+='<circle cx="'+pv.cx+'" cy="'+pv.cy+'" r="'+rr+'" fill="#c9a227" opacity="0.15"/>';
-      ph+='<circle cx="'+pv.cx+'" cy="'+pv.cy+'" r="'+rr+'" fill="none" stroke="#fffbe8" stroke-width="'+(2*s)+'" stroke-dasharray="'+(5*s)+' '+(4*s)+'"/>';
+      ph+='<path d="'+hexPath(pv.cx,pv.cy,rr)+'" fill="#c9a227" opacity="0.15"/>';
+      ph+='<path d="'+hexPath(pv.cx,pv.cy,rr)+'" fill="none" stroke="#fffbe8" stroke-width="'+(2*s)+'" stroke-dasharray="'+(5*s)+' '+(4*s)+'"/>';
     }
-    ph+='<circle cx="'+pv.cx+'" cy="'+pv.cy+'" r="'+(pv.cap?RC:R)+'" fill="'+empColor(own)+'" stroke="#241d17" stroke-width="'+SW+'"/>';
-    if(pv.cap)ph+='<text x="'+pv.cx+'" y="'+(pv.cy-7*s)+'" font-size="'+CF+'" fill="#8a6a10" text-anchor="middle">&#9733;</text>';
+    // hexagonal city marker (CoN style): dark casing, empire fill, inner ring, capitals larger with a star
+    const hr=(pv.cap?RC:R)*1.45;
+    ph+='<path d="'+hexPath(pv.cx,pv.cy,hr+SW*1.1)+'" fill="#241d17" opacity="0.85"/>';
+    ph+='<path d="'+hexPath(pv.cx,pv.cy,hr)+'" fill="'+empColor(own)+'" stroke="#1d1712" stroke-width="'+(SW*0.7)+'"/>';
+    ph+='<path d="'+hexPath(pv.cx,pv.cy,hr*0.56)+'" fill="none" stroke="#fdf6e3" stroke-width="'+(SW*0.75)+'" opacity="0.55"/>';
+    if(pv.cap)ph+='<text x="'+pv.cx+'" y="'+(pv.cy-hr-2.5*s)+'" font-size="'+CF+'" fill="#e0b830" text-anchor="middle" style="paint-order:stroke;stroke:#241d17;stroke-width:'+(2*s)+'px">&#9733;</text>';
     if(showLbl){
       let tag='';
       if(gar){
@@ -1913,7 +1970,7 @@ function updateMap(){
     if(!a.siege)continue;
     const dc=cellOf(a.siege);
     if(!dc)continue;
-    ah+='<circle cx="'+dc.x+'" cy="'+dc.y+'" r="'+(13*s)+'" fill="none" stroke="#c94040" stroke-width="'+(1.8*s)+'" stroke-dasharray="'+(4*s)+' '+(3*s)+'"/>';
+    ah+='<path d="'+hexPath(dc.x,dc.y,13*s)+'" fill="none" stroke="#c94040" stroke-width="'+(1.8*s)+'" stroke-dasharray="'+(4*s)+' '+(3*s)+'"/>';
   }
   svg.querySelector('#gArmy').innerHTML=ah;
   // draw march-order routes (dashed) for the player's armies
