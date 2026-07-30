@@ -2068,6 +2068,18 @@ function cellClick(cid){
     const enemyHere=G.armies[cid]&&G.armies[cid].e!==G.player;
     const foreignCity=destCell.city&&ownerOf(destCell.p)!==G.player;
     const hostile=enemyHere||foreignCity;
+    // clicking a peaceful empire's land: offer the declaration rather than a dead "no route"
+    const destOwner=cellOwnerOf(cid);
+    const peaceBlock=(destOwner!=='neutral'&&destOwner!==G.player&&!hostileTo(G.player,destOwner))?destOwner:blockerAt(cid,G.player);
+    if(a&&peaceBlock){
+      const nm=empName(peaceBlock);
+      showModal('Declare war on '+nm+'?',
+        '<div class="meta">You are at peace with '+nm+'. Their borders are sealed &mdash; your armies cannot enter or strike until war is declared.</div>'+
+        '<div class="meta">War costs no gold, but every other crown will note your appetite for conquest.</div>',
+        [['Declare war',()=>{closeModal();declareWar(G.player,peaceBlock);G.targeting=true;computeMarch();renderAll();saveGame();toast('War declared on '+nm+'. Their lands are open — choose your target.');},'primary'],
+         ['Keep the peace',()=>{closeModal();G.targeting=false;G.marchInfo=null;renderAll();},'']]);
+      return;
+    }
     if(a){
       const path=fullPathTo(G.selArmy,cid,G.player);
       if(path&&path.length>1){
