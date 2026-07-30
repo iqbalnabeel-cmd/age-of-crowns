@@ -58,6 +58,9 @@ h1,h2,h3{font-weight:normal}
 .rbtn .ric{font-size:19px;line-height:1;color:var(--gold)}
 .rbtn .rlb{font-size:9.5px;color:var(--muted);letter-spacing:0.4px;white-space:nowrap}
 #logBadge{position:absolute;top:3px;right:8px;background:var(--danger);color:#fff;border-radius:8px;font-size:9px;min-width:14px;padding:1px 3px;display:none;text-align:center}
+#main.railmin #rail{width:34px;padding:6px 2px}
+#main.railmin .rlb{display:none}
+#main.railmin .ric{font-size:16px}
 #drawer{position:absolute;top:0;right:0;bottom:0;width:330px;max-width:92%;background:rgba(24,19,14,.96);border-left:1px solid var(--gold);z-index:8;display:flex;flex-direction:column;transform:translateX(105%);transition:transform .22s ease}
 #drawer.open{transform:translateX(0)}
 #dHead{display:flex;align-items:center;justify-content:space-between;padding:8px 12px 4px}
@@ -210,6 +213,8 @@ h1,h2,h3{font-weight:normal}
   </div>
   <div id="main">
     <div id="rail">
+      <button class="rbtn" onclick="toggleRail()" title="Collapse/expand this bar"><span class="ric">&#9776;</span><span class="rlb">Menu</span></button>
+      <button class="rbtn" onclick="showCityList()" title="Your cities"><span class="ric">&#127984;</span><span class="rlb">Cities</span></button>
       <button class="rbtn" onclick="showStandings()" title="Standings"><span class="ric">&#9818;</span><span class="rlb">Standings</span></button>
       <button class="rbtn" id="techBtn" title="Research"><span class="ric">&#9879;</span><span class="rlb">Research</span></button>
       <button class="rbtn" id="unitsBtn" title="Units"><span class="ric">&#9876;</span><span class="rlb">Units</span></button>
@@ -296,8 +301,8 @@ const BLD={
  stables:{name:'Stables',icon:'cavalry',tracks:['cavalry'],cost:[50,100],turns:2,max:2,desc:'L1 unlocks tier-2 horse, L2 unlocks Knights'},
  workshop:{name:'Siege Workshop',icon:'catapult',tracks:['catapult'],cost:[60,120],turns:2,max:2,desc:'Required for any siege units; L2 unlocks Trebuchets'},
  walls:{name:'Walls',icon:'spear',cost:[60,120,220],turns:2,max:3,desc:'+15% garrison defense per level; the garrison starves slower under siege'},
- market:{name:'Market',icon:'ship',cost:[50,100],turns:2,max:2,desc:'+3 gold per turn per level'},
- granary:{name:'Granary',icon:'spear',cost:[60],turns:2,max:1,desc:'+2 recruits per turn in this city'}
+ market:{name:'Market',icon:'ship',cost:[50,100],turns:2,max:2,desc:'Earns you +3 extra gold every turn per level (L2 = +6 gold/turn)'},
+ granary:{name:'Granary',icon:'spear',cost:[60],turns:2,max:1,desc:'Feeds a bigger muster: this city can recruit 12 troops per turn instead of 10'}
 };
 const BKEYS=Object.keys(BLD);
 const SIEGE_ATTR=[0.22,0.16,0.11,0.07];    // garrison starvation per turn by wall level
@@ -507,17 +512,22 @@ function navalBattle(z,att,def){
   return rep;
 }
 
+const RESEARCH_PER_TURN=2;
+function researchesLeft(){return RESEARCH_PER_TURN-((G&&G.res)||0);}
 function researchTech(empKey,tr){
   const e=G.emp[empKey];
   if(!e||!e.tech)return false;
   const lv=e.tech[tr]||0;
   if(lv>=3)return false;
-  if(e.lastResearch===G.turn)return false;
+  if(empKey===G.player){
+    if(researchesLeft()<=0)return false;
+  }else if(e.lastResearch===G.turn)return false;
   const cost=TECH[tr].lv[lv].c;
   if(e.gold<cost)return false;
   e.gold-=cost;
   e.tech[tr]=lv+1;
   e.lastResearch=G.turn;
+  if(empKey===G.player)G.res=(G.res||0)+1;
   return true;
 }
 
@@ -542,14 +552,28 @@ function provsOf(e){return Object.keys(MAPD5.provs).filter(p=>ownerOf(p)===e);} 
 function cellsOf(e){let n=[];for(const c in G.cellOwner)if(G.cellOwner[c]===e)n.push(c);return n;}
 function occupiedCell(cid){const o=cellOwnerOf(cid);return o!=='neutral'&&homeEmpOf(provOf(cellOf(cid).p))!==o;}
 function armiesOf(e){return Object.keys(G.armies).filter(c=>G.armies[c].e===e);}
+const OCCUP_TURNS=5;                    // a freshly taken city pays half until it settles
+function isHomeCity(pid,e){return homeEmpOf(provOf(pid))===e;}
+function occupTurnsLeft(pid){return (G.occ&&G.occ[pid])||0;}
+function cityIncome(pid,e){
+  const pv=provOf(pid);
+  let s=pv.inc*((pv.cap&&homeEmpOf(pv)===e)?2:1)+3*bldLv(pid,'market');
+  if(occupTurnsLeft(pid)>0)s*=0.5;      // unrest in a newly conquered city
+  return s;
+}
 function incomeOf(e){
   let s=0;
-  provsOf(e).forEach(pid=>{
-    const pv=provOf(pid);
-    s+=pv.inc*((pv.cap&&homeEmpOf(pv)===e)?2:1);
-    s+=3*bldLv(pid,'market');
-  });
+  provsOf(e).forEach(pid=>{s+=cityIncome(pid,e);});
   return Math.round(s+cellsOf(e).length*0.15);
+}
+function tickOccupation(e){
+  G.occ=G.occ||{};
+  provsOf(e).forEach(pid=>{
+    if(G.occ[pid]>0){
+      G.occ[pid]--;
+      if(!G.occ[pid]){delete G.occ[pid];if(e===G.player)log('<b>'+provOf(pid).city+'</b> has settled under your rule — full tribute resumes.','');}
+    }
+  });
 }
 // ---- buildings (pass 3b) ----
 function bldLv(pid,b){return (G.bld&&G.bld[pid]&&G.bld[pid][b])||0;}
@@ -566,10 +590,12 @@ function recruitGateText(pid,t){
   const b=(tk==='spear'||tk==='sword')?'barracks':(tk==='cavalry'?'stables':'range');
   return BLD[b].name+' L'+(u.tier-1);
 }
+function canBuildIn(pid,e){return isHomeCity(pid,e);}   // only your ancestral homeland builds (Nabeel's rule)
 function startBuild(pid,b,empKey){
   const e=G.emp[empKey];
   const lv=bldLv(pid,b);
   if(!e||ownerOf(pid)!==empKey||lv>=BLD[b].max)return false;
+  if(!canBuildIn(pid,empKey))return false;
   G.buildQ=G.buildQ||{};
   if(G.buildQ[pid])return false;                    // one project per city
   const cost=BLD[b].cost[lv];
@@ -595,7 +621,7 @@ function processBuilds(empKey){
 function newGame(playerKey,rivalKeys,diff){
   G={turn:1,player:playerKey,emp:{},cellOwner:{},armies:{},log:[],selArmy:null,selCity:null,selZone:null,
      targeting:false,marchInfo:null,send:{},forced:false,over:false,diff:diff||'norm',animQ:[],
-     fleets:{},fmoved:{},fhalf:{},zoneTargeting:false,bld:{},buildQ:{},rec:{}};
+     fleets:{},fmoved:{},fhalf:{},zoneTargeting:false,bld:{},buildQ:{},rec:{},train:{},occ:{},res:0};
   const persPool=['agg','bld','opp'];
   const players=[playerKey,...rivalKeys];
   players.forEach(k=>{
@@ -761,6 +787,8 @@ function claimCell(cid,e){
   const cell=cellOf(cid);
   if(cell.city){                      // a city changed hands (only reached by beating its garrison, or walking into an undefended one)
     const pid=cell.p;
+    G.occ=G.occ||{};
+    if(!isHomeCity(pid,e))G.occ[pid]=OCCUP_TURNS;else delete G.occ[pid];   // retaking your own homeland has no unrest
     log(empName(e)+' captured the city of <b>'+provOf(pid).city+'</b>'+(prev!=='neutral'?' from '+empName(prev):'')+'.','');
     if(prev!=='neutral'&&G.emp[prev])checkElim(prev);
     checkWin(e);
@@ -910,18 +938,66 @@ function executeMarch(fromCell,toCell,want,forced,attackerKey){
 }
 const RECRUIT_CAP=10;
 function recruitedThisTurn(pid){G.rec=G.rec||{};return G.rec[pid]||0;}
+function trainTurns(t){return UNITS[t].tier;}          // tier 1 = 1 turn, tier 2 = 2, tier 3 = 3
+function queueOf(pid){G.train=G.train||{};return G.train[pid]||[];}
 function buyUnit5(pid,t){
   const e=G.emp[G.player];
   if(ownerOf(pid)!==G.player||e.gold<UNITS[t].cost)return;
-  if(!canRecruit(pid,t)){toast(UNITS[t].name+' need a '+recruitGateText(pid,t)+' in this city — build it below.');return;}
+  if(!canRecruit(pid,t)){toast(UNITS[t].name+' need a '+recruitGateText(pid,t)+' in this city — build it in a homeland city.');return;}
   const cap=RECRUIT_CAP+2*bldLv(pid,'granary');
   if(recruitedThisTurn(pid)>=cap){toast('This city has already mustered '+cap+' recruits this turn.');return;}
   G.rec[pid]=(G.rec[pid]||0)+1;
   e.gold-=UNITS[t].cost;
-  const f={};f[t]=1;
-  placeArmy(provOf(pid).citycell,G.player,f,99,false);
-  renderAll();
+  G.train=G.train||{};
+  G.train[pid]=G.train[pid]||[];
+  G.train[pid].push({t,left:trainTurns(t)});
+  renderHdr();
   openCityPanel(pid);
+}
+function cancelTrain(pid,i){                            // refund half when you change your mind
+  const q=queueOf(pid);
+  if(!q[i])return;
+  const u=UNITS[q[i].t];
+  G.emp[G.player].gold+=Math.floor(u.cost/2);
+  q.splice(i,1);
+  renderHdr();openCityPanel(pid);saveGame();
+}
+function processTraining(empKey){
+  G.train=G.train||{};
+  for(const pid in G.train){
+    if(ownerOf(pid)!==empKey)continue;
+    const q=G.train[pid];
+    const done={};
+    for(let i=q.length-1;i>=0;i--){
+      q[i].left--;
+      if(q[i].left<=0){done[q[i].t]=(done[q[i].t]||0)+1;q.splice(i,1);}
+    }
+    if(cnt(done)){
+      placeArmy(provOf(pid).citycell,empKey,done,99,false);
+      if(empKey===G.player)log(cnt(done)+' fresh troop'+(cnt(done)>1?'s':'')+' muster in <b>'+provOf(pid).city+'</b>.','');
+    }
+    if(!q.length)delete G.train[pid];
+  }
+}
+// ---- neutral cities defend themselves (free lords raise troops and fortify) ----
+function growNeutrals(){
+  G.bld=G.bld||{};
+  for(const pid in MAPD5.provs){
+    if(ownerOf(pid)!=='neutral')continue;
+    const cc=provOf(pid).citycell;
+    const gar=G.armies[cc];
+    const rich=provOf(pid).inc>=10;
+    const capTroops=rich?14:10;
+    if(Math.random()<(rich?0.5:0.35)){
+      const t=pick(['militia','levy','shortbow','handxbow']);
+      if(!gar)G.armies[cc]={e:'neutral',u:{[t]:1},mv:0,w:0};
+      else if(cnt(gar.u)<capTroops)gar.u[t]=(gar.u[t]||0)+1;
+    }
+    if(G.turn>8&&Math.random()<0.05&&bldLv(pid,'walls')<2){   // they raise walls over time
+      G.bld[pid]=G.bld[pid]||{};
+      G.bld[pid].walls=(G.bld[pid].walls||0)+1;
+    }
+  }
 }
 function buyGalley5(pid,z){
   const e=G.emp[G.player];
@@ -1111,6 +1187,8 @@ function aiTurn(k){
   resolveSieges(k);
   healArmies(k);
   processBuilds(k);
+  processTraining(k);
+  tickOccupation(k);
   armiesOf(k).forEach(c=>{if(G.armies[c])G.armies[c].w=0,G.armies[c].mv=0;});
   e.gold+=Math.round(incomeOf(k)*D.inc);
   const reserve=P.reserve+D.res;
@@ -1127,6 +1205,7 @@ function aiTurn(k){
   let built=0;
   for(const pid of myProvs){
     if(built>=2)break;
+    if(!canBuildIn(pid,k))continue;              // homeland only, same rule as the player
     if(G.buildQ&&G.buildQ[pid])continue;
     if(Math.random()>0.45)continue;
     const prefs2=e.pers==='bld'?['market','walls','barracks','range','stables','workshop','granary']
@@ -1156,8 +1235,9 @@ function aiTurn(k){
       t=pick(any);
     }
     e.gold-=UNITS[t].cost;budget-=UNITS[t].cost;
-    const f={};f[t]=1;
-    placeArmy(provOf(pid).citycell,k,f,99,false);
+    G.train=G.train||{};                          // AI trains over time too
+    G.train[pid]=G.train[pid]||[];
+    G.train[pid].push({t,left:trainTurns(t)});
   }
   const coastal=myProvs.filter(p=>((provOf(p).zones)||[]).length);
   let totalFleet=0;for(const z in ZONES)totalFleet+=fleetOf(z,k);
@@ -1220,10 +1300,39 @@ const ICON={
  catapult:'<circle cx="4" cy="13" r="1.4" fill="currentColor"/><circle cx="11.5" cy="13" r="1.4" fill="currentColor"/><path d="M2 11.5 L14 11.5" stroke="currentColor" stroke-width="1.4" fill="none"/><path d="M4.5 11 L12 3.5" stroke="currentColor" stroke-width="1.6" fill="none"/><circle cx="12.4" cy="3.2" r="1.7" fill="currentColor"/><path d="M8 11 L6.2 7.5" stroke="currentColor" stroke-width="1.2" fill="none"/>'
 };
 const ART={"spear": "<ellipse cx=\"16\" cy=\"29.6\" rx=\"8\" ry=\"1.8\" fill=\"#241d17\" opacity=\"0.18\"/>\n<path d=\"M8 29 L24.5 4.5\" stroke=\"#7a5233\" stroke-width=\"1.5\" fill=\"none\"/>\n<path d=\"M24 5.2 L27.2 1 L26.4 6.4 Z\" fill=\"#8a8a86\" stroke=\"#241d17\" stroke-width=\"0.5\"/>\n<path d=\"M13 29 L13.6 21 L12.6 15.5 Q13 13.4 16 13.2 Q19 13.4 19.4 15.5 L18.4 21 L19 29 L17 29 L16 22.5 L15 29 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<circle cx=\"16\" cy=\"10\" r=\"3\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M13.6 9.4 L18.4 9.4\" stroke=\"#241d17\" stroke-width=\"0.7\"/>\n<circle cx=\"10.6\" cy=\"19.4\" r=\"3.6\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.9\"/>\n<circle cx=\"10.6\" cy=\"19.4\" r=\"1\" fill=\"#241d17\"/>", "sword": "<ellipse cx=\"16\" cy=\"29.6\" rx=\"8\" ry=\"1.8\" fill=\"#241d17\" opacity=\"0.18\"/>\n<path d=\"M19.8 15.2 L23 15.8\" stroke=\"currentColor\" stroke-width=\"1.6\"/>\n<path d=\"M23.4 15.4 L27.6 4.6\" stroke=\"#8a8a86\" stroke-width=\"1.8\" fill=\"none\"/>\n<path d=\"M21.6 14.4 L25.4 16.2\" stroke=\"#241d17\" stroke-width=\"1.2\"/>\n<circle cx=\"23.2\" cy=\"16.4\" r=\"0.9\" fill=\"#241d17\"/>\n<path d=\"M14 29 L14.6 21 L13.6 15.5 Q14 13.4 17 13.2 Q20 13.4 20.4 15.5 L19.4 21 L20 29 L18 29 L17 22.5 L16 29 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<circle cx=\"17\" cy=\"10\" r=\"3\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M14.6 9.4 L19.4 9.4\" stroke=\"#241d17\" stroke-width=\"0.7\"/>\n<path d=\"M12.4 13.6 Q8.2 14.4 8.6 20 Q8.9 24.6 12.4 26.4 Q14.4 22.8 14.2 18.4 Q14.1 15.2 12.4 13.6 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.9\"/>\n<path d=\"M11.5 16.5 L11.5 23.5 M9.6 19.8 L13.6 19.8\" stroke=\"#241d17\" stroke-width=\"0.6\"/>", "longbow": "<ellipse cx=\"16\" cy=\"29.6\" rx=\"8\" ry=\"1.8\" fill=\"#241d17\" opacity=\"0.18\"/>\n<path d=\"M22 4 Q29.5 16 22 28\" stroke=\"#7a5233\" stroke-width=\"1.6\" fill=\"none\"/>\n<path d=\"M22 4 L22 28\" stroke=\"#241d17\" stroke-width=\"0.6\"/>\n<path d=\"M10 15.8 L24 15.8\" stroke=\"#7a5233\" stroke-width=\"1\"/>\n<path d=\"M25.8 15.8 L23 14.6 L23 17 Z\" fill=\"#8a8a86\"/>\n<path d=\"M11.5 29 L12.1 21 L11.4 15.8 Q11.8 13.6 14.6 13.4 Q17.4 13.6 17.8 15.8 L17 21 L17.6 29 L15.7 29 L14.7 22.5 L13.6 29 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<circle cx=\"14.6\" cy=\"10.2\" r=\"3\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M12.2 9.6 L17 9.6\" stroke=\"#241d17\" stroke-width=\"0.7\"/>", "crossbow": "<ellipse cx=\"17\" cy=\"29.6\" rx=\"8\" ry=\"1.8\" fill=\"#241d17\" opacity=\"0.18\"/>\n<path d=\"M15 29 L15.6 21 L14.6 15.5 Q15 13.4 18 13.2 Q21 13.4 21.4 15.5 L20.4 21 L21 29 L19 29 L18 22.5 L17 29 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<circle cx=\"18\" cy=\"10\" r=\"3\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M15.6 9.4 L20.4 9.4\" stroke=\"#241d17\" stroke-width=\"0.7\"/>\n<path d=\"M4.5 16 L17 16\" stroke=\"#7a5233\" stroke-width=\"1.9\"/>\n<path d=\"M7.6 10.4 Q3.6 16 7.6 21.6\" stroke=\"#8a8a86\" stroke-width=\"1.5\" fill=\"none\"/>\n<path d=\"M7.6 10.4 L7.6 21.6\" stroke=\"#241d17\" stroke-width=\"0.7\"/>\n<path d=\"M2.4 16 L6 14.4 L6 17.6 Z\" fill=\"#8a8a86\" stroke=\"#241d17\" stroke-width=\"0.4\"/>\n<path d=\"M14.8 16 L15.6 14.2\" stroke=\"currentColor\" stroke-width=\"1.4\"/>", "cavalry": "<ellipse cx=\"16\" cy=\"29.8\" rx=\"11\" ry=\"1.8\" fill=\"#241d17\" opacity=\"0.18\"/>\n<path d=\"M6.5 29 L7.5 23.5 L7 20 Q7.5 16.5 12 16 L21 16 Q25.5 16.5 25.5 20 L26.5 23 L27.5 29 L25.5 29 L24.5 23.5 L22.5 21.5 L21.5 29 L19.6 29 L19.2 22 L11.8 22 L10.8 29 L8.9 29 L9.5 21.5 L9 23.5 L8.4 29 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.9\"/>\n<path d=\"M24.5 17.5 L27.8 12.6 Q29.4 11.4 29.6 13.4 L29 16.2 L27 18.6 Q25.6 19.6 24.5 17.5 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M7.2 17.6 Q5 19.4 5.4 22.4\" stroke=\"#241d17\" stroke-width=\"1\" fill=\"none\"/>\n<path d=\"M13.4 15.6 L13.8 10.4 Q14.4 8.2 16.6 8.2 Q18.8 8.4 19 10.6 L18.6 15.6 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<circle cx=\"16.4\" cy=\"5.6\" r=\"2.6\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M10 13.5 L25 3.5\" stroke=\"#7a5233\" stroke-width=\"1.2\"/>\n<path d=\"M24.6 3.9 L27 1.6 L26.2 4.9 Z\" fill=\"#8a8a86\"/>", "catapult": "<ellipse cx=\"16\" cy=\"29.8\" rx=\"11\" ry=\"1.8\" fill=\"#241d17\" opacity=\"0.18\"/>\n<circle cx=\"9\" cy=\"27\" r=\"2.6\" fill=\"#7a5233\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<circle cx=\"23\" cy=\"27\" r=\"2.6\" fill=\"#7a5233\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M5.5 25 L26.5 25\" stroke=\"#7a5233\" stroke-width=\"2\"/>\n<path d=\"M10 25 L15.5 17 L21 25\" stroke=\"#7a5233\" stroke-width=\"1.6\" fill=\"none\"/>\n<path d=\"M11.5 24 L26 5.5\" stroke=\"#7a5233\" stroke-width=\"1.8\"/>\n<circle cx=\"26.6\" cy=\"4.8\" r=\"2.8\" fill=\"#8a8a86\" stroke=\"#241d17\" stroke-width=\"0.9\"/>\n<path d=\"M15.5 17 L18 20.8\" stroke=\"#241d17\" stroke-width=\"0.9\"/>", "ship": "<path d=\"M4 22.5 L28 22.5 L23.5 29 L8.5 29 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.9\"/>\n<path d=\"M6.5 24.5 L4.5 28 M11 24.5 L9.5 29.5 M16 24.5 L15.5 30 M21 24.5 L21.5 29.5 M25.5 24.5 L26.5 28\" stroke=\"#7a5233\" stroke-width=\"0.9\"/>\n<path d=\"M16 5.5 L16 22.5\" stroke=\"#7a5233\" stroke-width=\"1.3\"/>\n<path d=\"M16.8 7 Q26 12.5 16.8 19.5 Z\" fill=\"#efe6cd\" stroke=\"#241d17\" stroke-width=\"0.8\"/>\n<path d=\"M16 5.5 L11.5 7.5 L16 9 Z\" fill=\"currentColor\" stroke=\"#241d17\" stroke-width=\"0.6\"/>\n<path d=\"M28.5 22.5 Q30 20.5 29 18.5\" stroke=\"#7a5233\" stroke-width=\"1.1\" fill=\"none\"/>"};
-// ---- 18-unit roster: tiers share their track's figure, marked with bronze/silver/gold chevrons (CoN-style rank) ----
+// ---- 18-unit roster: each tier gets its own silhouette details on top of the track figure ----
 const TIERCOL={2:'#d9d9d9',3:'#ffd257'};
-function artBase(t){return ART[trackOf?trackOf(t):t]||ART[t]||ART.spear;}
-function iconBase(t){return ICON[trackOf?trackOf(t):t]||ICON[t]||ICON.spear;}
+// per-unit overlays drawn in the 32x32 figure box: tier 1 = light/no armour, tier 3 = helm plume, heavy kit, bigger weapon
+const TIERART={
+ militia:'<path d="M12.4 12.6 L19.6 12.6" stroke="#8a7550" stroke-width="1.1"/>',                                    // rag tunic, no helm
+ spear:'<path d="M12.6 8.2 L19.4 8.2" stroke="#8a8a86" stroke-width="1.5"/>',                                        // kettle helm brim
+ pike:'<path d="M8 29 L27.5 1.5" stroke="#7a5233" stroke-width="1.9"/><path d="M27 2.2 L30 -1 L29.2 4 Z" fill="#8a8a86" stroke="#241d17" stroke-width="0.5"/><path d="M12.6 7.6 L19.4 7.6" stroke="#c9c9c5" stroke-width="1.8"/><path d="M16 4.6 L16 1.6" stroke="#ffd257" stroke-width="1.6"/>',
+ levy:'<path d="M13.4 13 L20.6 13" stroke="#8a7550" stroke-width="1.1"/>',
+ sword:'<path d="M13.6 9.2 L20.4 9.2" stroke="#8a8a86" stroke-width="1.5"/>',
+ marms:'<path d="M13.6 8.6 L20.4 8.6" stroke="#c9c9c5" stroke-width="2"/><path d="M17 5.4 L17 2.2" stroke="#ffd257" stroke-width="1.6"/><path d="M23.4 15.4 L28.4 3.4" stroke="#c9c9c5" stroke-width="2.4" fill="none"/><path d="M14.6 16.5 L19.4 16.5" stroke="#c9c9c5" stroke-width="1.2"/>',
+ shortbow:'<path d="M23 7 Q28 15.8 23 24.6" stroke="#7a5233" stroke-width="1.3" fill="none"/>',
+ longbow:'',
+ warbow:'<path d="M21 2.4 Q30.5 15.8 21 29.2" stroke="#6b4526" stroke-width="2.1" fill="none"/><path d="M12 9.6 L17.2 9.6" stroke="#c9c9c5" stroke-width="1.7"/><path d="M14.6 6.6 L14.6 3.8" stroke="#ffd257" stroke-width="1.5"/>',
+ handxbow:'<path d="M5.6 12.4 Q3.2 16 5.6 19.6" stroke="#8a8a86" stroke-width="1.1" fill="none"/>',
+ crossbow:'',
+ arbalest:'<path d="M6.6 8.6 Q1.6 16 6.6 23.4" stroke="#c9c9c5" stroke-width="2.1" fill="none"/><path d="M15.6 9.4 L20.4 9.4" stroke="#c9c9c5" stroke-width="1.8"/><path d="M18 6.4 L18 3.6" stroke="#ffd257" stroke-width="1.5"/><path d="M3.4 16 L8 13.8 L8 18.2 Z" fill="#c9c9c5" stroke="#241d17" stroke-width="0.4"/>',
+ lighthorse:'<path d="M10 13.5 L22 6" stroke="#7a5233" stroke-width="1"/>',                                          // light lance, no barding
+ cavalry:'',
+ knight:'<path d="M9 13.2 L27.5 1.4" stroke="#7a5233" stroke-width="1.9"/><path d="M27 2 L30.4 -0.6 L29.4 3.6 Z" fill="#c9c9c5"/><path d="M13.4 15.6 Q13 19.6 14 22.6 L20 22.6 Q21 19.6 20.6 15.6 Z" fill="currentColor" stroke="#241d17" stroke-width="0.7" opacity="0.95"/><path d="M14.6 4.2 L14.6 1" stroke="#ffd257" stroke-width="1.8"/><path d="M13.6 8.6 L19.6 8.6" stroke="#c9c9c5" stroke-width="1.6"/>',
+ ballista:'<path d="M11 20 Q15.5 15 20 20" stroke="#8a8a86" stroke-width="1.4" fill="none"/><path d="M8 22 L23 22" stroke="#7a5233" stroke-width="1.4"/>',
+ catapult:'',
+ trebuchet:'<path d="M15.5 17 L15.5 25" stroke="#7a5233" stroke-width="2.2"/><path d="M26.6 4.8 L27.6 12" stroke="#7a5233" stroke-width="1.2"/><circle cx="27.8" cy="13.4" r="2.4" fill="#5a4730" stroke="#241d17" stroke-width="0.7"/><path d="M6 25 L12 17" stroke="#7a5233" stroke-width="1.4"/>'
+};
+function artBase(t){return (ART[trackOf?trackOf(t):t]||ART[t]||ART.spear)+(TIERART[t]||'');}
+const TIERICON={   // small marks so the 16x16 list icons differ per tier too
+ pike:'<path d="M12.4 1.6 L13.6 1.6" stroke="#ffd257" stroke-width="1.2"/>',
+ marms:'<path d="M12.4 1.6 L13.6 1.6" stroke="#ffd257" stroke-width="1.2"/>',
+ warbow:'<path d="M12.4 1.6 L13.6 1.6" stroke="#ffd257" stroke-width="1.2"/>',
+ arbalest:'<path d="M12.4 1.6 L13.6 1.6" stroke="#ffd257" stroke-width="1.2"/>',
+ knight:'<path d="M12.4 1.6 L13.6 1.6" stroke="#ffd257" stroke-width="1.2"/>',
+ trebuchet:'<path d="M12.4 1.6 L13.6 1.6" stroke="#ffd257" stroke-width="1.2"/>'
+};
+function iconBase(t){return (ICON[trackOf?trackOf(t):t]||ICON[t]||ICON.spear)+(TIERICON[t]||'');}
 function tierChevrons(t){                 // drawn in the 32x32 figure box, top-left
   const u=UNITS[t];
   if(!u||u.tier<2)return '';
@@ -1328,6 +1437,49 @@ function updateLogBadge(){
 }
 const HELP_HTML='<b>How to play:</b> tap an army figure, compose your force in the bar, press <b>Choose target</b>, then click any highlighted cell, city, or enemy army &mdash; hover previews the route; distant clicks set multi-turn march orders. Armies roam freely (foot 3 cells, cavalry 5, siege 2); attacking a defended city offers <b>Assault</b> or <b>Lay siege</b>. Units have HP and armor; wounded stacks heal each turn, fastest in your own cities. Cities recruit (tier 2-3 troops need <b>buildings</b>: Barracks, Archery Range, Stables; siege engines need a Workshop). Walls toughen garrisons and slow sieges. Coastal cities build War Galleys; holding a sea uncontested lets armies cross it. Research boosts damage 10%/level. First to hold 48 of 80 cities wins.';
 function showHelp(){showModal('How to play',HELP_HTML,[['Close',closeModal,'primary']]);}
+// garrison strength band for cities you do not own (no exact numbers — Nabeel's fog rule)
+function garrisonBand(n){
+  if(!n)return {txt:'undefended',cls:'#7ec97e',bars:0};
+  if(n<=4)return {txt:'weak',cls:'#7ec97e',bars:1};
+  if(n<=9)return {txt:'moderate',cls:'#c9a227',bars:2};
+  if(n<=15)return {txt:'strong',cls:'#e08a3c',bars:3};
+  return {txt:'formidable',cls:'#c94040',bars:4};
+}
+function bandGlyph(n){const b=garrisonBand(n);let s='';for(let i=0;i<4;i++)s+=i<b.bars?'|':'';return s||'-';}
+// jump straight to one of your cities
+function showCityList(){
+  const mine=provsOf(G.player).sort((a,b)=>{
+    const ha=isHomeCity(a,G.player)?0:1,hb=isHomeCity(b,G.player)?0:1;
+    return ha-hb||provOf(a).city.localeCompare(provOf(b).city);
+  });
+  let h='<div class="meta">'+mine.length+' cities &middot; homeland cities can build.</div><div style="max-height:52vh;overflow-y:auto">';
+  mine.forEach(pid=>{
+    const pv=provOf(pid);
+    const gar=G.armies[pv.citycell];
+    const home=isHomeCity(pid,G.player);
+    const q=(G.buildQ||{})[pid];
+    const tq=queueOf(pid).length;
+    h+='<div class="buildrow"><span>'+(pv.cap?'&#9733; ':'')+pv.city+
+       (home?' <span style="color:var(--gold);font-size:11px">homeland</span>':' <span style="color:var(--muted);font-size:11px">'+(occupTurnsLeft(pid)?'unrest '+occupTurnsLeft(pid)+'t':'occupied')+'</span>')+
+       ' <span style="color:var(--muted);font-size:11.5px">'+(gar?cnt(gar.u)+' troops':'empty')+(q?' &middot; &#128296;'+q.left+'t':'')+(tq?' &middot; training '+tq:'')+'</span></span>'+
+       '<button onclick="jumpToCity(\''+pid+'\')">Open</button></div>';
+  });
+  h+='</div>';
+  showModal('Your cities',h,[['Close',closeModal,'primary']]);
+}
+function jumpToCity(pid){
+  closeModal();
+  const pv=provOf(pid);
+  VB.w=Math.min(VB.w,MAPD5.W/4);VB.h=VB.w*MAPD5.H/MAPD5.W;
+  VB.x=pv.cx-VB.w/2;VB.y=pv.cy-VB.h/2;
+  applyVB();
+  cityClick(pid);
+}
+function toggleRail(){
+  const m=$('main');
+  m.classList.toggle('railmin');
+  try{localStorage.setItem('aoc5rail',m.classList.contains('railmin')?'1':'0');}catch(e){}
+}
 let _toastT=null;
 function toast(msg){
   let el=document.getElementById('toast5');
@@ -1369,10 +1521,14 @@ function playAnims(done){
   const layer=document.createElementNS(SVGNS,'g');
   svg.appendChild(layer);
   let i=0;
+  let prevTo=null;
   function next(){
     if(i>=q.length){svg.removeChild(layer);if(done)done();return;}
     const ev=q[i++];
-    const a=cellOf(ev.from),b=cellOf(ev.to);
+    let a=cellOf(ev.from);const b=cellOf(ev.to);
+    // a chain of hops must start where the last hop ended, or the marker appears to teleport back
+    if(prevTo&&ev.from!==prevTo&&CADJ[prevTo]&&CADJ[prevTo].includes(ev.to))a=cellOf(prevTo);
+    prevTo=ev.to;
     if(!a||!b){next();return;}
     layer.innerHTML='<g style="color:'+empColor(ev.e)+'"><circle cx="8" cy="8" r="11" fill="'+empColor(ev.e)+'" opacity="0.35"/>'+iconBase(ev.t)+'</g>';
     const g=layer.firstChild;
@@ -1405,6 +1561,7 @@ function loadGame(){
   }
   G.animQ=[];G.selArmy=null;G.selCity=null;G.selZone=null;G.targeting=false;G.marchInfo=null;G.send={};G.forced=false;
   G.bld=G.bld||{};G.buildQ=G.buildQ||{};G.rec=G.rec||{};   // pre-3b saves gain building state
+  G.train=G.train||{};G.occ=G.occ||{};G.res=G.res||0;      // pre-4a saves gain training/occupation state
   if(!Object.keys(G.bld).length){for(const k in G.emp)if(EMPIRES[k])G.bld[EMPIRES[k].cap]={barracks:1,range:1,stables:1};}
   buildCadj();
   $('start').style.display='none';
@@ -1450,6 +1607,11 @@ function initMap(){
   buildRoads();
   let rh='';
   ROADS.forEach(r=>{ rh+='<line x1="'+r[0]+'" y1="'+r[1]+'" x2="'+r[2]+'" y2="'+r[3]+'" stroke="#8a6f4a" stroke-width="1.1" opacity="0.55"/>'; });
+  for(const cid in MAPD5.cells){   // every tile shows its centre point (that's what an army must reach to claim it)
+    const c=MAPD5.cells[cid];
+    if(c.city)continue;
+    rh+='<circle cx="'+c.x+'" cy="'+c.y+'" r="1.5" fill="#7a684a" opacity="0.5"/>';
+  }
   for(const pid in MAPD5.provs){  // CoN-style road nodes at every province centre
     const pv=MAPD5.provs[pid];
     rh+='<rect x="'+(pv.cx-2.2)+'" y="'+(pv.cy-2.2)+'" width="4.4" height="4.4" fill="#8a6f4a" stroke="#241d17" stroke-width="0.6" opacity="0.8"/>';
@@ -1508,7 +1670,14 @@ function updateMap(){
     }
     ph+='<circle cx="'+pv.cx+'" cy="'+pv.cy+'" r="'+(pv.cap?RC:R)+'" fill="'+empColor(own)+'" stroke="#241d17" stroke-width="'+SW+'"/>';
     if(pv.cap)ph+='<text x="'+pv.cx+'" y="'+(pv.cy-7*s)+'" font-size="'+CF+'" fill="#8a6a10" text-anchor="middle">&#9733;</text>';
-    if(showLbl)ph+='<text x="'+pv.cx+'" y="'+(pv.cy+16*s)+'" font-size="'+LF+'" font-weight="bold" fill="#241a10" text-anchor="middle" style="paint-order:stroke;stroke:#f3ecd8;stroke-width:'+LSW+'px">'+pv.city+(gar?' ('+cnt(gar.u)+')':'')+'</text>';
+    if(showLbl){
+      let tag='';
+      if(gar){
+        if(own===G.player)tag=' ('+cnt(gar.u)+')';                 // your own cities show exact numbers
+        else{const b=garrisonBand(cnt(gar.u));tag=' <tspan fill="'+b.cls+'">'+bandGlyph(cnt(gar.u))+'</tspan>';}
+      }
+      ph+='<text x="'+pv.cx+'" y="'+(pv.cy+16*s)+'" font-size="'+LF+'" font-weight="bold" fill="#241a10" text-anchor="middle" style="paint-order:stroke;stroke:#f3ecd8;stroke-width:'+LSW+'px">'+pv.city+tag+'</text>';
+    }
     ph+='</g>';
   }
   svg.querySelector('#gPin').innerHTML=ph;
@@ -1585,14 +1754,15 @@ function updateMap(){
     zh+='<g class="zone'+selCls+tgtCls+'" data-z="'+z+'">';
     zh+='<circle cx="'+Z.x+'" cy="'+Z.y+'" r="'+(20*s)+'" fill="transparent"/>';
     zh+='<circle cx="'+Z.x+'" cy="'+Z.y+'" r="13" class="zc"/>';
-    zh+=mapIcon('ship',Z.x-6.5,Z.y-7,'#dfeaf2');
+    zh+='<g transform="translate('+(Z.x-9)+' '+(Z.y-10)+') scale(0.62)">'+ART.ship+'</g>';   // full galley art, not the tiny glyph
     zh+='<text class="zn" x="'+Z.x+'" y="'+(Z.y+27)+'">'+Z.name+'</text>';
     let fx=Z.x+16;
     for(const e in G.fleets[z]){
       if(!G.fleets[z][e])continue;
-      zh+='<rect x="'+fx+'" y="'+(Z.y-10)+'" width="26" height="15" rx="4" fill="'+empColor(e)+'" stroke="#241d17" stroke-width="1"/>';
-      zh+='<text x="'+(fx+13)+'" y="'+(Z.y+2)+'" text-anchor="middle" font-size="10" font-weight="bold" fill="#fff" style="paint-order:stroke;stroke:#241d17;stroke-width:2px">'+G.fleets[z][e]+'</text>';
-      fx+=28;
+      zh+='<rect x="'+fx+'" y="'+(Z.y-10)+'" width="30" height="15" rx="4" fill="'+empColor(e)+'" stroke="#241d17" stroke-width="1"/>';
+      zh+='<g transform="translate('+(fx+1.5)+' '+(Z.y-8.5)+') scale(0.75)" style="color:#f5edd8">'+ICON.ship+'</g>';
+      zh+='<text x="'+(fx+24)+'" y="'+(Z.y+2)+'" text-anchor="middle" font-size="10" font-weight="bold" fill="#fff" style="paint-order:stroke;stroke:#241d17;stroke-width:2px">'+G.fleets[z][e]+'</text>';
+      fx+=32;
     }
     zh+='</g>';
   }
@@ -1622,17 +1792,20 @@ function techEffect(tr,lv){
 }
 function showTech(){
   const e=G.emp[G.player];
-  let h='<div class="meta" style="margin-bottom:8px">One research per turn. Effects apply to your whole empire and show in battle odds.'+(e.lastResearch===G.turn?' <b style="color:var(--danger)">Already researched this turn.</b>':'')+'</div>';
+  const left=researchesLeft();
+  let h='<div class="meta" style="margin-bottom:8px">You may complete <b>'+RESEARCH_PER_TURN+' researches per turn</b> &mdash; <b style="color:'+(left?'var(--gold)':'var(--danger)')+'">'+left+' remaining this turn</b>. Effects apply empire-wide and show in battle odds.</div>';
   TKEYS.forEach(tr=>{
     const T=TECH[tr];
     const lv=e.tech[tr]||0;
     const next=lv<3?T.lv[lv]:null;
+    const pct=Math.round(lv/3*100);
     h+='<div class="trow">'+artSvg(T.icon,34,'#c9a227');
     h+='<div class="tinfo"><div class="tname">'+T.name+' <span class="pips">'+'&#9679;'.repeat(lv)+'&#9675;'.repeat(3-lv)+'</span></div>';
+    h+='<div class="rbar" style="height:6px;margin:4px 0"><div style="width:'+pct+'%;height:6px;background:'+(lv>=3?'#7ec97e':'var(--gold)')+'"></div></div>';
     h+='<div class="tdesc">'+T.units+' &middot; '+(lv>0?techEffect(tr,lv):'no bonus yet')+'</div>';
     h+=next?'<div class="tnext">Next: <b>'+next.n+'</b> ('+next.c+'g) &rarr; '+techEffect(tr,lv+1)+'</div>':'<div class="tnext" style="color:#7ec97e">Mastered</div>';
     h+='</div>';
-    if(next)h+='<button '+(e.gold<next.c||e.lastResearch===G.turn?'disabled':'class="primary"')+' onclick="doResearch(\''+tr+'\')">'+next.c+'g</button>';
+    if(next)h+='<button '+(e.gold<next.c||left<=0?'disabled':'class="primary"')+' onclick="doResearch(\''+tr+'\')">'+next.c+'g</button>';
     h+='</div>';
   });
   showModal('Tech tree &mdash; '+e.gold+' gold',h,[['Close',closeModal,'primary']]);
@@ -1825,10 +1998,15 @@ function openCityPanel(pid){
     h+='</div>';
   }
   if(tab==='ov'||!mine){
-    h+='<div class="meta">'+empName(own)+' &middot; '+(pv.inc*((pv.cap&&homeEmpOf(pv)===own)?2:1)+3*bldLv(pid,'market'))+' gold/turn &middot; '+pv.cells.length+' lands'+(pv.cap?' &middot; capital':'')+'</div>';
-    h+='<div class="meta">Garrison: '+(gar?cnt(gar.u)+' troops ('+empName(gar.e)+')':'none &mdash; undefended!')+'</div>';
+    const inc=mine?Math.round(cityIncome(pid,own)):null;
+    h+='<div class="meta">'+empName(own)+(mine?' &middot; '+inc+' gold/turn'+(occupTurnsLeft(pid)?' <span style="color:var(--danger)">(unrest &minus;50%, '+occupTurnsLeft(pid)+' turns left)</span>':''):'')+' &middot; '+pv.cells.length+' lands'+(pv.cap?' &middot; capital':'')+'</div>';
+    if(gar){
+      if(mine)h+='<div class="meta">Garrison: '+cnt(gar.u)+' troops</div>';
+      else{const b=garrisonBand(cnt(gar.u));h+='<div class="meta">Garrison: <span style="color:'+b.cls+'">'+b.txt+'</span> ('+empName(gar.e)+') &mdash; scouts report strength, not numbers.</div>';}
+    }else h+='<div class="meta">Garrison: <span style="color:#7ec97e">undefended</span></div>';
     const blds=BKEYS.filter(b=>bldLv(pid,b)).map(b=>BLD[b].name+' L'+bldLv(pid,b));
     h+='<div class="meta">Buildings: '+(blds.length?blds.join(', '):'none')+'</div>';
+    if(mine)h+='<div class="meta">'+(isHomeCity(pid,G.player)?'<span style="color:var(--gold)">Homeland city</span> &mdash; can build.':'Conquered city &mdash; recruits only, no construction.')+'</div>';
     const q0=(G.buildQ||{})[pid];
     if(q0)h+='<div class="meta">&#128296; '+BLD[q0.b].name+' ready in '+q0.left+' turn'+(q0.left>1?'s':'')+'.</div>';
     if(mine&&!G.over){
@@ -1842,8 +2020,15 @@ function openCityPanel(pid){
     const capped=rc>=RECRUIT_CAP;
     const capT=RECRUIT_CAP+2*bldLv(pid,'granary');
     const cappedT=rc>=capT;
-    h+='<h3 style="font-size:14px">Recruit (joins the garrison, acts next turn)</h3>';
-    h+='<div class="meta">Mustered this turn: '+rc+'/'+capT+(cappedT?' &mdash; the muster is full until next turn':'')+'</div>';
+    h+='<h3 style="font-size:14px">Recruit</h3>';
+    h+='<div class="meta">Mustered this turn: '+rc+'/'+capT+(cappedT?' &mdash; the muster is full until next turn':'')+' &middot; training takes 1 turn (tier 1), 2 (tier 2), 3 (tier 3)</div>';
+    const tq=queueOf(pid);
+    if(tq.length){
+      h+='<div class="meta" style="color:var(--gold)">In training:</div>';
+      tq.forEach((q,i)=>{
+        h+='<div class="buildrow"><span>'+uicon(q.t)+UNITS[q.t].name+' &mdash; '+q.left+' turn'+(q.left>1?'s':'')+' left</span><button onclick="cancelTrain(\''+pid+'\','+i+')">Cancel</button></div>';
+      });
+    }
     for(const tk in TRACKS){                    // one row per trainable unit here, grouped by track; next tier shown as a locked hint
       const tiers=UKEYS.filter(t=>UNITS[t].track===tk).sort((a,b)=>UNITS[a].tier-UNITS[b].tier);
       let nextLock=null;
@@ -1859,17 +2044,21 @@ function openCityPanel(pid){
     }
   }
   if(mine&&!G.over&&tab==='bld'){
-    const q=(G.buildQ||{})[pid];
-    if(q)h+='<div class="meta">&#128296; '+BLD[q.b].name+' &mdash; ready in '+q.left+' turn'+(q.left>1?'s':'')+'.</div>';
-    BKEYS.forEach(b=>{
-      const lv=bldLv(pid,b);
-      const maxed=lv>=BLD[b].max;
-      const cost=maxed?null:BLD[b].cost[lv];
-      h+='<div class="buildrow"><span title="'+BLD[b].desc+'">'+BLD[b].name+' '+(lv?'L'+lv:'&mdash;')+(maxed?' (max)':'')+'</span>';
-      if(!maxed)h+='<button '+((e.gold<cost||q)?'disabled':'')+' onclick="doBuild(\''+pid+'\',\''+b+'\')">'+(lv?'Upgrade':'Build')+' '+cost+'g</button>';
-      h+='</div>';
-    });
-    h+='<div class="meta">One project per city &middot; '+BLD.barracks.turns+' turns each. Hover a building for its effect.</div>';
+    if(!canBuildIn(pid,G.player)){
+      h+='<div class="meta">Only your <b>homeland cities</b> can raise buildings. Conquered cities pay tribute and muster tier-1 troops, but the great works stay at home.</div>';
+    }else{
+      const q=(G.buildQ||{})[pid];
+      if(q)h+='<div class="meta">&#128296; '+BLD[q.b].name+' &mdash; ready in '+q.left+' turn'+(q.left>1?'s':'')+'.</div>';
+      BKEYS.forEach(b=>{
+        const lv=bldLv(pid,b);
+        const maxed=lv>=BLD[b].max;
+        const cost=maxed?null:BLD[b].cost[lv];
+        h+='<div class="buildrow" style="align-items:flex-start"><span title="'+BLD[b].desc+'"><b>'+BLD[b].name+' '+(lv?'L'+lv:'')+(maxed?' (max)':'')+'</b><br><span style="color:var(--muted);font-size:11.5px">'+BLD[b].desc+'</span></span>';
+        if(!maxed)h+='<button '+((e.gold<cost||q)?'disabled':'')+' onclick="doBuild(\''+pid+'\',\''+b+'\')">'+(lv?'Upgrade':'Build')+' '+cost+'g</button>';
+        h+='</div>';
+      });
+      h+='<div class="meta">One project per city &middot; '+BLD.barracks.turns+' turns each.</div>';
+    }
   }
   $('panel').innerHTML=h;
   showDrawer((pv.cap?'&#9733; ':'')+pv.city);
@@ -2018,14 +2207,21 @@ function endTurn(){
       advanceOrders(G.player);
       healArmies(G.player);            // wounds mend: cities 50%, own land 25%, abroad 10%
       processBuilds(G.player);         // construction advances
+      processTraining(G.player);       // recruits finish training
+      growNeutrals();                  // free lords raise troops and fortify
+      tickOccupation(G.player);        // captured cities settle toward full income
       G.rec={};                        // fresh recruit cap each turn
+      G.res=0;                         // research allowance refreshes
       G.emp[G.player].gold+=incomeOf(G.player);
       log('Turn '+G.turn+' — your coffers grow by '+incomeOf(G.player)+' gold.','turnmark');
     }
-    $('endTurn').disabled=false;
-    G.targeting=false;G.marchInfo=null;
-    renderAll();
-    saveGame();
+    // play the post-turn marches/sieges instead of leaving them queued for the next action
+    playAnims(()=>{
+      $('endTurn').disabled=false;
+      G.targeting=false;G.marchInfo=null;
+      renderAll();
+      saveGame();
+    });
   });
 }
 function gameOver(win,msg){
