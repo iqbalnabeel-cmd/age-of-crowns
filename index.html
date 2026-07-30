@@ -91,13 +91,16 @@ h1,h2,h3{font-weight:normal}
 .steprow{display:flex;align-items:center;justify-content:space-between;font-size:13px;margin:3px 0}
 .steprow input{width:52px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-family:inherit}
 /* map styling */
-.cell{stroke:#9a8c72;stroke-width:0.3;stroke-opacity:0.55;cursor:pointer}
+.cell{stroke:#9a8c72;stroke-width:0.7;stroke-opacity:0.5;cursor:pointer;vector-effect:non-scaling-stroke}
+.road{stroke:#a98d63;stroke-width:1.6;stroke-linecap:round;opacity:0.7;vector-effect:non-scaling-stroke;pointer-events:none}
+.roadcase{stroke:#6b573a;stroke-width:3.4;stroke-linecap:round;opacity:0.3;vector-effect:non-scaling-stroke;pointer-events:none}
+.cellpip{fill:#7a684a;opacity:0.4;pointer-events:none}
 .cell.target{stroke:var(--gold);stroke-width:1.6;stroke-dasharray:3 2.4}
 .cell.pathhl{stroke:#fffbe8;stroke-width:1.8}
 .cell.occupied{stroke:#6e5a3a;stroke-width:0.9;stroke-dasharray:2.4 1.8}
 .cell.atwar{stroke:#a33636;stroke-width:0.8}
-.provline{stroke:#3a2d1c;stroke-width:1.5;stroke-linejoin:round}
-.provhalo{stroke:#f0e6cd;stroke-width:3.6;stroke-linejoin:round;opacity:0.5}
+.provline{stroke:#3a2d1c;stroke-width:1.7;stroke-linejoin:round;vector-effect:non-scaling-stroke;pointer-events:none}
+.provhalo{stroke:#f0e6cd;stroke-width:4.2;stroke-linejoin:round;opacity:0.45;vector-effect:non-scaling-stroke;pointer-events:none}
 .armyfig{cursor:pointer}
 .searoute{fill:none;stroke:#5d7d8a;stroke-width:2;stroke-dasharray:7 6;opacity:.8;pointer-events:none}
 .searoute.target{stroke:var(--gold);stroke-width:3;opacity:1}
@@ -1845,12 +1848,13 @@ function initMap(){
   buildRoads();
   let rh='';
   // dirt casing under every road, then the lighter track on top — reads like a worn road, not a ruled line
-  ROADS.forEach(d=>{ rh+='<path d="'+d+'" fill="none" stroke="#6b573a" stroke-width="2.6" stroke-linecap="round" opacity="0.35"/>'; });
-  ROADS.forEach(d=>{ rh+='<path d="'+d+'" fill="none" stroke="#a98d63" stroke-width="1.15" stroke-linecap="round" opacity="0.75"/>'; });
+  // (widths are screen-constant via non-scaling-stroke so roads stay hair-thin at every zoom)
+  ROADS.forEach(d=>{ rh+='<path class="roadcase" d="'+d+'" fill="none"/>'; });
+  ROADS.forEach(d=>{ rh+='<path class="road" d="'+d+'" fill="none"/>'; });
   for(const cid in MAPD5.cells){   // every tile shows its centre point (that's what an army must reach to claim it)
     const c=MAPD5.cells[cid];
     if(c.city)continue;
-    rh+='<circle cx="'+c.x+'" cy="'+c.y+'" r="1.4" fill="#7a684a" opacity="0.45"/>';
+    rh+='<circle class="cellpip" cx="'+c.x+'" cy="'+c.y+'" r="1.4"/>';
   }
   gRoad.innerHTML=rh;
   for(const cid in MAPD5.cells){
