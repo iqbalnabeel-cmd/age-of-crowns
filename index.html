@@ -313,6 +313,7 @@ const BLD={
  granary:{name:'Granary',icon:'spear',cost:[60],turns:2,max:1,desc:'Feeds a bigger muster: this city can recruit 12 troops per turn instead of 10'}
 };
 const BKEYS=Object.keys(BLD);
+const ANNEX_KEY='__annex';                 // pass 4e: annexation occupies the same one-project-per-city slot
 const SIEGE_ATTR=[0.22,0.16,0.11,0.07];    // garrison starvation per turn by wall level
 
 const EMPIRES={
@@ -660,7 +661,30 @@ function recruitGateText(pid,t){
   const b=(tk==='spear'||tk==='sword')?'barracks':(tk==='cavalry'?'stables':'range');
   return BLD[b].name+' L'+(u.tier-1);
 }
-function canBuildIn(pid,e){return isHomeCity(pid,e);}   // only your ancestral homeland builds (Nabeel's rule)
+// ---- annexation of conquered cities (pass 4e) ----
+// A conquered city musters tier-1 troops and pays tribute, but raises nothing. Annex it — once its
+// unrest has settled — and it builds and recruits exactly like your homeland. Cost scales with how
+// rich and how large the city is, so absorbing a great city is a real decision, not a formality.
+const ANNEX_BASE=50;
+function annexedBy(pid){return (G.annex&&G.annex[pid])||null;}
+function isAnnexed(pid,e){return annexedBy(pid)===e;}
+function annexCost(pid){const pv=provOf(pid);return Math.round(ANNEX_BASE+7*pv.inc+6*pv.cells.length);}
+function annexTurns(pid){return provOf(pid).cells.length>=7?4:3;}   // great cities take longer to absorb
+function canAnnex(pid,e){
+  return ownerOf(pid)===e&&!isHomeCity(pid,e)&&!isAnnexed(pid,e)&&occupTurnsLeft(pid)<=0;
+}
+function startAnnex(pid,empKey){
+  const e=G.emp[empKey];
+  if(!e||!canAnnex(pid,empKey))return false;
+  G.buildQ=G.buildQ||{};
+  if(G.buildQ[pid])return false;                    // one project per city, same slot as construction
+  const cost=annexCost(pid);
+  if(e.gold<cost)return false;
+  e.gold-=cost;
+  G.buildQ[pid]={b:ANNEX_KEY,left:annexTurns(pid)};
+  return true;
+}
+function canBuildIn(pid,e){return isHomeCity(pid,e)||isAnnexed(pid,e);}   // homeland, or a city you annexed
 function startBuild(pid,b,empKey){
   const e=G.emp[empKey];
   const lv=bldLv(pid,b);
@@ -675,15 +699,20 @@ function startBuild(pid,b,empKey){
   return true;
 }
 function processBuilds(empKey){
-  G.buildQ=G.buildQ||{};G.bld=G.bld||{};
+  G.buildQ=G.buildQ||{};G.bld=G.bld||{};G.annex=G.annex||{};
   for(const pid in G.buildQ){
     if(ownerOf(pid)!==empKey)continue;
     const q=G.buildQ[pid];
     q.left--;
     if(q.left<=0){
-      G.bld[pid]=G.bld[pid]||{};
-      G.bld[pid][q.b]=(G.bld[pid][q.b]||0)+1;
-      if(empKey===G.player)log('The '+BLD[q.b].name+(G.bld[pid][q.b]>1?' (L'+G.bld[pid][q.b]+')':'')+' of <b>'+provOf(pid).city+'</b> is complete.','');
+      if(q.b===ANNEX_KEY){
+        G.annex[pid]=empKey;               // recorded per empire, so retaking it later restores the annexation
+        if(empKey===G.player)log('<b>'+provOf(pid).city+'</b> is annexed into your realm — it may now raise buildings and train every tier.','turnmark');
+      }else{
+        G.bld[pid]=G.bld[pid]||{};
+        G.bld[pid][q.b]=(G.bld[pid][q.b]||0)+1;
+        if(empKey===G.player)log('The '+BLD[q.b].name+(G.bld[pid][q.b]>1?' (L'+G.bld[pid][q.b]+')':'')+' of <b>'+provOf(pid).city+'</b> is complete.','');
+      }
       delete G.buildQ[pid];
     }
   }
@@ -691,7 +720,7 @@ function processBuilds(empKey){
 function newGame(playerKey,rivalKeys,diff){
   G={turn:1,player:playerKey,emp:{},cellOwner:{},armies:{},log:[],selArmy:null,selCity:null,selZone:null,
      targeting:false,marchInfo:null,send:{},forced:false,over:false,diff:diff||'norm',animQ:[],
-     fleets:{},fmoved:{},fhalf:{},zoneTargeting:false,bld:{},buildQ:{},rec:{},train:{},occ:{},res:0,dip:{}};
+     fleets:{},fmoved:{},fhalf:{},zoneTargeting:false,bld:{},buildQ:{},rec:{},train:{},occ:{},res:0,dip:{},annex:{}};
   const persPool=['agg','bld','opp'];
   const players=[playerKey,...rivalKeys];
   players.forEach(k=>{
@@ -1038,7 +1067,7 @@ function queueOf(pid){G.train=G.train||{};return G.train[pid]||[];}
 function buyUnit5(pid,t){
   const e=G.emp[G.player];
   if(ownerOf(pid)!==G.player||e.gold<UNITS[t].cost)return;
-  if(!canRecruit(pid,t)){toast(UNITS[t].name+' need a '+recruitGateText(pid,t)+' in this city — build it in a homeland city.');return;}
+  if(!canRecruit(pid,t)){toast(UNITS[t].name+' need a '+recruitGateText(pid,t)+' in this city'+(canBuildIn(pid,G.player)?' — raise one from the Buildings tab.':' — annex the city first, then build one.'));return;}
   const cap=RECRUIT_CAP+2*bldLv(pid,'granary');
   if(recruitedThisTurn(pid)>=cap){toast('This city has already mustered '+cap+' recruits this turn.');return;}
   G.rec[pid]=(G.rec[pid]||0)+1;
@@ -1344,6 +1373,17 @@ function aiTurn(k){
   const myProvs=provsOf(k);
   // build: up to 2 cities without a project start a useful upgrade
   let built=0;
+  // pass 4e: absorb settled conquests so the AI is not stuck mustering militia from half its empire.
+  // Annexation gets its own budget of one city per turn — sharing the build allowance meant an AI that
+  // annexed simply stopped constructing, and the annexed cities never grew the buildings that justify them.
+  let annexedThisTurn=0;
+  for(const pid of myProvs){
+    if(annexedThisTurn>=1)break;
+    if(canBuildIn(pid,k)||!canAnnex(pid,k))continue;
+    if(G.buildQ&&G.buildQ[pid])continue;
+    const ac=annexCost(pid);
+    if(e.gold>=ac+reserve+40&&Math.random()<0.5&&startAnnex(pid,k))annexedThisTurn++;
+  }
   for(const pid of myProvs){
     if(built>=2)break;
     if(!canBuildIn(pid,k))continue;              // homeland only, same rule as the player
@@ -2319,9 +2359,11 @@ function openCityPanel(pid){
     }else h+='<div class="meta">Garrison: <span style="color:#7ec97e">undefended</span></div>';
     const blds=BKEYS.filter(b=>bldLv(pid,b)).map(b=>BLD[b].name+' L'+bldLv(pid,b));
     h+='<div class="meta">Buildings: '+(blds.length?blds.join(', '):'none')+'</div>';
-    if(mine)h+='<div class="meta">'+(isHomeCity(pid,G.player)?'<span style="color:var(--gold)">Homeland city</span> &mdash; can build.':'Conquered city &mdash; recruits only, no construction.')+'</div>';
+    if(mine)h+='<div class="meta">'+(isHomeCity(pid,G.player)?'<span style="color:var(--gold)">Homeland city</span> &mdash; can build.'
+      :isAnnexed(pid,G.player)?'<span style="color:var(--gold)">Annexed city</span> &mdash; can build.'
+      :'Conquered city &mdash; tier-1 recruits only until you annex it.')+'</div>';
     const q0=(G.buildQ||{})[pid];
-    if(q0)h+='<div class="meta">&#128296; '+BLD[q0.b].name+' ready in '+q0.left+' turn'+(q0.left>1?'s':'')+'.</div>';
+    if(q0)h+='<div class="meta">'+(q0.b===ANNEX_KEY?'&#127983; Annexation':'&#128296; '+BLD[q0.b].name)+' ready in '+q0.left+' turn'+(q0.left>1?'s':'')+'.</div>';
     if(mine&&!G.over){
       (pv.zones||[]).forEach(z=>{
         h+='<div class="buildrow"><span>'+uicon('ship')+SHIP.name+' &rarr; '+ZONES[z].name+' &mdash; '+SHIP.cost+'g</span><button '+(e.gold<SHIP.cost?'disabled':'')+' onclick="buyGalley5(\''+pid+'\',\''+z+'\')">Buy</button></div>';
@@ -2358,10 +2400,22 @@ function openCityPanel(pid){
   }
   if(mine&&!G.over&&tab==='bld'){
     if(!canBuildIn(pid,G.player)){
-      h+='<div class="meta">Only your <b>homeland cities</b> can raise buildings. Conquered cities pay tribute and muster tier-1 troops, but the great works stay at home.</div>';
+      const aq=(G.buildQ||{})[pid];
+      h+='<div class="meta">A <b>conquered city</b>. It pays tribute and musters tier-1 troops, but raises nothing until you <b>annex</b> it into your realm.</div>';
+      if(aq&&aq.b===ANNEX_KEY){
+        h+='<div class="meta">&#127983; Annexation under way &mdash; complete in '+aq.left+' turn'+(aq.left>1?'s':'')+'.</div>';
+      }else if(occupTurnsLeft(pid)>0){
+        h+='<div class="meta">&#9203; The city is still restless. Annexation may begin in '+occupTurnsLeft(pid)+' turn'+(occupTurnsLeft(pid)>1?'s':'')+'.</div>';
+      }else{
+        const ac=annexCost(pid),at=annexTurns(pid);
+        h+='<div class="buildrow" style="align-items:flex-start"><span><b>Annex '+pv.city+'</b><br><span style="color:var(--muted);font-size:11.5px">Takes '+at+' turns. Afterwards this city builds and trains every tier, exactly like your homeland.</span></span>';
+        h+='<button '+((e.gold<ac||aq)?'disabled':'')+' onclick="doAnnex(\''+pid+'\')">Annex '+ac+'g</button></div>';
+      }
     }else{
       const q=(G.buildQ||{})[pid];
-      if(q)h+='<div class="meta">&#128296; '+BLD[q.b].name+' &mdash; ready in '+q.left+' turn'+(q.left>1?'s':'')+'.</div>';
+      if(!isHomeCity(pid,G.player))h+='<div class="meta"><span style="color:var(--gold)">Annexed city</span> &mdash; it builds as your homeland does.</div>';
+      if(q&&q.b===ANNEX_KEY)h+='<div class="meta">&#127983; Annexation under way &mdash; complete in '+q.left+' turn'+(q.left>1?'s':'')+'.</div>';
+      else if(q)h+='<div class="meta">&#128296; '+BLD[q.b].name+' &mdash; ready in '+q.left+' turn'+(q.left>1?'s':'')+'.</div>';
       BKEYS.forEach(b=>{
         const lv=bldLv(pid,b);
         const maxed=lv>=BLD[b].max;
@@ -2569,6 +2623,12 @@ function doSiege(from,cid,want){
 
 function doLiftSiege(cid){ liftSiege(cid); renderAll(); openArmyPanel(cid); saveGame(); }
 
+function doAnnex(pid){
+  if(startAnnex(pid,G.player)){
+    log('The annexation of <b>'+provOf(pid).city+'</b> begins.','');
+    renderHdr();openCityPanel(pid);saveGame();
+  }else toast('The annexation cannot begin right now.');
+}
 function doBuild(pid,b){
   if(startBuild(pid,b,G.player)){
     log('Construction of the '+BLD[b].name+' begins in <b>'+provOf(pid).city+'</b>.','');
