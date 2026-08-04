@@ -98,7 +98,9 @@ h1,h2,h3{font-weight:normal}
 .cell.target{stroke:var(--gold);stroke-width:1.6;stroke-dasharray:3 2.4}
 .cell.pathhl{stroke:#fffbe8;stroke-width:1.8}
 .cell.occupied{stroke:#6e5a3a;stroke-width:0.9;stroke-dasharray:2.4 1.8}
-.cell.atwar{stroke:#a33636;stroke-width:0.8}
+.cell.atwar{stroke:#a33636;stroke-width:1.1;vector-effect:non-scaling-stroke}
+.provline.warline{stroke:#7d1a1a;stroke-width:2.6}
+.provhalo.warline{stroke:#ff8f76;stroke-width:5;opacity:0.8}
 .provline{stroke:#3a2d1c;stroke-width:1.7;stroke-linejoin:round;vector-effect:non-scaling-stroke;pointer-events:none}
 .provhalo{stroke:#f0e6cd;stroke-width:4.2;stroke-linejoin:round;opacity:0.45;vector-effect:non-scaling-stroke;pointer-events:none}
 .armyfig{cursor:pointer}
@@ -1756,14 +1758,30 @@ function buildRoads(){
 function playAnims(done){
   const q=(G&&G.animQ)?G.animQ:[];
   if(G)G.animQ=[];
-  if(!ANIM_ON||!q.length){if(done)done();return;}
+  // v5.4d: requestAnimationFrame never fires while the tab is hidden. The turn counter lives in
+  // this callback, so a backgrounded tab used to freeze the game mid-end-turn. Skip the show when
+  // nobody is watching, and keep a watchdog so a stalled frame can never strand the turn.
+  if(!ANIM_ON||!q.length||document.hidden){if(done)done();return;}
   const svg=$('map');
   const layer=document.createElementNS(SVGNS,'g');
   svg.appendChild(layer);
   let i=0;
   let prevTo=null;
+  let finished=false,watchdog=null;
+  function finish(){
+    if(finished)return;
+    finished=true;
+    if(watchdog){clearTimeout(watchdog);watchdog=null;}
+    document.removeEventListener('visibilitychange',onHide);
+    if(layer.parentNode)layer.parentNode.removeChild(layer);
+    if(done)done();
+  }
+  function onHide(){if(document.hidden)finish();}   // tabbed away mid-march: finish the turn at once
+  document.addEventListener('visibilitychange',onHide);
+  function arm(){if(watchdog)clearTimeout(watchdog);watchdog=setTimeout(finish,1500);}
   function next(){
-    if(i>=q.length){svg.removeChild(layer);if(done)done();return;}
+    if(finished)return;
+    if(i>=q.length){finish();return;}
     const ev=q[i++];
     let a=cellOf(ev.from);const b=cellOf(ev.to);
     // a chain of hops must start where the last hop ended, or the marker appears to teleport back
@@ -1773,7 +1791,9 @@ function playAnims(done){
     layer.innerHTML='<g style="color:'+empColor(ev.e)+'"><circle cx="8" cy="8" r="11" fill="'+empColor(ev.e)+'" opacity="0.35"/>'+iconBase(ev.t)+'</g>';
     const g=layer.firstChild;
     const t0=performance.now(),dur=240;
+    arm();
     function frame(now){
+      if(finished)return;
       let k=Math.min(1,(now-t0)/dur);
       k=k<0.5?2*k*k:1-Math.pow(-2*k+2,2)/2;   // ease in-out for a smoother march
       g.setAttribute('transform','translate('+(a.x+(b.x-a.x)*k-8)+' '+(a.y+(b.y-a.y)*k-8)+')');
@@ -1843,8 +1863,13 @@ function initMap(){
   const svg=$('map');
   svg.innerHTML='';
   const mk=(tag,attrs)=>{const el=document.createElementNS(SVGNS,tag);for(const a in attrs)el.setAttribute(a,attrs[a]);return el;};
-  const gCell=mk('g',{id:'gCell'}),gOut=mk('g',{id:'gOut'}),gTer=mk('g',{id:'gTer'}),gRoad=mk('g',{id:'gRoad'}),gPin=mk('g',{id:'gPin'}),gArmy=mk('g',{id:'gArmy'}),gZone=mk('g',{id:'gZone'});
-  svg.appendChild(gCell);svg.appendChild(gOut);svg.appendChild(gTer);svg.appendChild(gRoad);svg.appendChild(gPin);svg.appendChild(gArmy);svg.appendChild(gZone);
+  const defs=mk('defs',{});
+  // v5.4d: a red diagonal hatch marks enemy realms. Colour-blending alone could not signal war on a
+  // red empire like England, so the war flag is now a pattern that reads over any empire colour.
+  defs.innerHTML='<pattern id="warHatch" patternUnits="userSpaceOnUse" width="10" height="10" patternTransform="rotate(45)"><line x1="0" y1="0" x2="0" y2="10" stroke="#8c1f1f" stroke-width="3.4"/></pattern>';
+  svg.appendChild(defs);
+  const gCell=mk('g',{id:'gCell'}),gWar=mk('g',{id:'gWar','pointer-events':'none'}),gOut=mk('g',{id:'gOut'}),gTer=mk('g',{id:'gTer'}),gRoad=mk('g',{id:'gRoad'}),gPin=mk('g',{id:'gPin'}),gArmy=mk('g',{id:'gArmy'}),gZone=mk('g',{id:'gZone'});
+  svg.appendChild(gCell);svg.appendChild(gWar);svg.appendChild(gOut);svg.appendChild(gTer);svg.appendChild(gRoad);svg.appendChild(gPin);svg.appendChild(gArmy);svg.appendChild(gZone);
   buildRoads();
   let rh='';
   // dirt casing under every road, then the lighter track on top — reads like a worn road, not a ruled line
@@ -1865,8 +1890,8 @@ function initMap(){
   for(const pid in MAPD5.provs){          // double-stroked province borders: pale casing under a dark line
     const o=provOf(pid).outline;
     if(o){
-      gOut.appendChild(mk('path',{d:o,'class':'provhalo','fill':'none'}));
-      gOut.appendChild(mk('path',{d:o,'class':'provline','fill':'none'}));
+      gOut.appendChild(mk('path',{d:o,'class':'provhalo','fill':'none','data-p':pid}));
+      gOut.appendChild(mk('path',{d:o,'class':'provline','fill':'none','data-p':pid}));
     }
   }
   TERRAIN.forEach(t=>{
@@ -1898,6 +1923,23 @@ function updateMap(){
     el.classList.toggle('occupied',occupiedCell(cid));
     el.classList.toggle('atwar',co!=='neutral'&&co!==G.player&&atWar(G.player,co));
   });
+  // v5.4d: enemy realms carry a red hatch and a red border, so war reads at a glance on every
+  // empire colour rather than depending on a tint that vanished against red or pink empires.
+  const atWarProv=pid=>{const ow=ownerOf(pid);return !!(ow&&ow!=='neutral'&&ow!==G.player&&atWar(G.player,ow));};
+  svg.querySelectorAll('#gOut path').forEach(el=>{
+    const pid=el.getAttribute('data-p');
+    el.classList.toggle('warline',!!pid&&atWarProv(pid));
+  });
+  const gWarL=svg.querySelector('#gWar');
+  if(gWarL){
+    let wh='';
+    for(const pid in MAPD5.provs){
+      if(!atWarProv(pid))continue;
+      const o=provOf(pid).outline;
+      if(o)wh+='<path d="'+o+'" fill="url(#warHatch)" opacity="0.34"/>';
+    }
+    gWarL.innerHTML=wh;
+  }
   const R=4.6*s, RC=5.8*s, LF=13*s, CF=12*s, SW=1.3*s, LSW=3.4*s;
   let ph='';
   for(const pid in MAPD5.provs){
