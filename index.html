@@ -51,6 +51,8 @@ h1,h2,h3{font-weight:normal}
 #map.dragging{cursor:grabbing}
 #zoomctl{position:absolute;right:12px;bottom:12px;display:flex;flex-direction:column;gap:6px;z-index:5}
 #zoomctl button{width:36px;height:36px;font-size:19px;padding:0}
+#zoomctl{transition:right .22s ease,bottom .22s ease}
+#mapwrap.drawered #zoomctl{right:342px}
 /* ---- CoN-style chrome (pass 3c) ---- */
 #rail{width:74px;background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;gap:4px;padding:8px 5px;overflow-y:auto;flex:none;z-index:7}
 .rbtn{display:flex;flex-direction:column;align-items:center;gap:2px;padding:7px 2px;border:1px solid transparent;background:transparent;border-radius:8px;position:relative}
@@ -120,11 +122,11 @@ h1,h2,h3{font-weight:normal}
 .brow .n{margin-left:auto;font-weight:bold}
 .uic{width:14px;height:14px;vertical-align:-2px;margin-right:4px;flex:none}
 #modal{position:fixed;inset:0;background:rgba(0,0,0,.65);display:none;align-items:center;justify-content:center;z-index:60}
-#modal .box{background:var(--panel);border:2px solid var(--gold);border-radius:10px;padding:22px;max-width:540px;width:94%;max-height:85vh;overflow-y:auto}
+#modal .box{background:var(--panel);border:2px solid var(--gold);border-radius:10px;padding:22px;max-width:540px;width:94%;max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
 #modal h3{color:var(--gold);font-size:20px;margin-bottom:10px}
-#modal .body{font-size:14px;line-height:1.6;margin-bottom:14px}
+#modal .body{font-size:14px;line-height:1.6;margin-bottom:14px;overflow-y:auto;flex:1 1 auto;min-height:0}
 #modal .body .good{color:var(--ok)} #modal .body .bad{color:var(--danger)}
-#modal .btns{display:flex;gap:10px;justify-content:flex-end}
+#modal .btns{display:flex;gap:10px;justify-content:flex-end;flex:0 0 auto}
 .ucards{display:grid;grid-template-columns:1fr 1fr;gap:10px}
 .ucard{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:10px;font-size:12.5px}
 .ucard h4{color:var(--gold);font-size:15px;font-weight:normal;margin:4px 0 2px}
@@ -182,6 +184,7 @@ h1,h2,h3{font-weight:normal}
   #drawer{top:auto;left:0;right:0;bottom:0;width:100%;max-width:100%;max-height:62%;border-left:none;border-top:1px solid var(--gold);border-radius:10px 10px 0 0;transform:translateY(105%)}
   #drawer.open{transform:translateY(0)}
   #drawer.open~#abar{display:none!important}
+  #mapwrap.drawered #zoomctl{right:12px;bottom:calc(62% + 10px)}   /* bottom sheet on phones: lift the controls above it */
   #logdrawer{width:86%}
   #hdr{gap:8px;padding:6px 8px}
   #hdr .title{display:none}
@@ -1598,9 +1601,14 @@ const ZOOMTH=780;
 const CHIPTH=500;
 // ---- CoN-style chrome helpers (pass 3c) ----
 function setRailLbl(id,txt){const b=$(id);if(!b)return;const l=b.querySelector('.rlb');if(l)l.textContent=txt;else b.textContent=txt;}
-function showDrawer(title){$('dTitle').innerHTML=title||'';$('drawer').classList.add('open');}
+function showDrawer(title){
+  $('dTitle').innerHTML=title||'';
+  $('drawer').classList.add('open');
+  const mw=$('mapwrap');if(mw)mw.classList.add('drawered');   // pass 4f: slide the zoom controls clear
+}
 function closeDrawer(deselect){
   $('drawer').classList.remove('open');
+  const mw=$('mapwrap');if(mw)mw.classList.remove('drawered');
   if(deselect&&G){G.selCity=null;G.selZone=null;G.zoneTargeting=false;renderAll();}
 }
 function toggleLog(open){
@@ -2364,6 +2372,13 @@ function openCityPanel(pid){
       :'Conquered city &mdash; tier-1 recruits only until you annex it.')+'</div>';
     const q0=(G.buildQ||{})[pid];
     if(q0)h+='<div class="meta">'+(q0.b===ANNEX_KEY?'&#127983; Annexation':'&#128296; '+BLD[q0.b].name)+' ready in '+q0.left+' turn'+(q0.left>1?'s':'')+'.</div>';
+    if(mine){                                  // pass 4f: the default tab used to hide the training queue entirely
+      const tq=queueOf(pid);
+      if(tq.length){
+        const soonest=Math.min.apply(null,tq.map(x=>x.left));
+        h+='<div class="meta">&#9876; In training: '+tq.length+' unit'+(tq.length>1?'s':'')+' &mdash; next in '+soonest+' turn'+(soonest>1?'s':'')+'.</div>';
+      }
+    }
     if(mine&&!G.over){
       (pv.zones||[]).forEach(z=>{
         h+='<div class="buildrow"><span>'+uicon('ship')+SHIP.name+' &rarr; '+ZONES[z].name+' &mdash; '+SHIP.cost+'g</span><button '+(e.gold<SHIP.cost?'disabled':'')+' onclick="buyGalley5(\''+pid+'\',\''+z+'\')">Buy</button></div>';
@@ -2376,6 +2391,7 @@ function openCityPanel(pid){
     const capT=RECRUIT_CAP+2*bldLv(pid,'granary');
     const cappedT=rc>=capT;
     h+='<h3 style="font-size:14px">Recruit</h3>';
+    h+='<div class="meta" style="font-size:11px">Each unit lists <b>dmg</b> (damage it deals each round), <b>hp</b> (damage it can absorb) and <b>armour</b> (subtracted from every hit it takes).</div>';
     h+='<div class="meta">Mustered this turn: '+rc+'/'+capT+(cappedT?' &mdash; the muster is full until next turn':'')+' &middot; training takes 1 turn (tier 1), 2 (tier 2), 3 (tier 3)</div>';
     const tq=queueOf(pid);
     if(tq.length){
@@ -2390,7 +2406,7 @@ function openCityPanel(pid){
       tiers.forEach(t=>{
         const u=UNITS[t];
         if(canRecruit(pid,t)){
-          h+='<div class="buildrow"><span>'+uicon(t)+u.name+' &mdash; '+u.cost+'g <span style="opacity:0.7">d'+u.dmg+' h'+u.hp+' a'+u.armor+'</span></span><button '+((e.gold<u.cost||cappedT)?'disabled':'')+' onclick="buyUnit5(\''+pid+'\',\''+t+'\')">Buy</button></div>';
+          h+='<div class="buildrow"><span>'+uicon(t)+u.name+' &mdash; '+u.cost+'g <span style="opacity:0.7">'+u.dmg+' dmg &middot; '+u.hp+' hp &middot; '+(u.armor?u.armor+' armour':'no armour')+'</span></span><button '+((e.gold<u.cost||cappedT)?'disabled':'')+' onclick="buyUnit5(\''+pid+'\',\''+t+'\')">Buy</button></div>';
         }else if(!nextLock){
           nextLock='<div class="meta" style="padding-left:4px">&#128274; '+u.name+' &mdash; needs '+recruitGateText(pid,t)+'</div>';
         }
@@ -2599,7 +2615,7 @@ function gameOver(win,msg){
   log(msg,'turnmark');
   showModal(win?'THE WORLD IS YOURS':'THE CROWN IS LOST',
     msg+'<br><br>'+(win?'A golden age begins under your rule.':'History will remember your attempt.'),
-    [['Play again',()=>location.reload(),'primary']]);
+    [['Play again',()=>location.reload(),'primary']],{persist:true});
 }
 
 function cancelOrder(cid){
@@ -2782,7 +2798,8 @@ function initInput(){
 
 
 // ==== seg_modal.js ====
-function showModal(title,body,btns){
+let MODAL_PERSIST=false;                    // pass 4f: game-over must not be dismissable, everything else must
+function showModal(title,body,btns,opts){
   $('mTitle').innerHTML=title;
   $('mBody').innerHTML=body;
   $('mBtns').innerHTML='';
@@ -2793,9 +2810,27 @@ function showModal(title,body,btns){
     el.onclick=b[1];
     $('mBtns').appendChild(el);
   });
+  MODAL_PERSIST=!!(opts&&opts.persist);
   $('modal').style.display='flex';
 }
-function closeModal(){$('modal').style.display='none';}
+function closeModal(){$('modal').style.display='none';MODAL_PERSIST=false;}
+function modalOpen(){const m=$('modal');return !!m&&m.style.display==='flex';}
+function dismissModal(){if(modalOpen()&&!MODAL_PERSIST)closeModal();}
+// One Escape key walks back out of whatever is open, innermost first. There was no keydown handler
+// at all before this, so a modal taller than the window could trap you with its Close below the fold.
+function initGlobalKeys(){
+  document.addEventListener('keydown',ev=>{
+    if(ev.key!=='Escape')return;
+    if(modalOpen()){dismissModal();return;}
+    const ld=$('logdrawer');
+    if(ld&&ld.classList.contains('open')){toggleLog(false);return;}
+    const dr=$('drawer');
+    if(dr&&dr.classList.contains('open')){closeDrawer(true);return;}
+    if(G&&G.targeting){G.targeting=false;G.marchInfo=null;renderAll();}
+  });
+  const m=$('modal');
+  if(m)m.addEventListener('mousedown',ev=>{if(ev.target===m)dismissModal();});   // backdrop only, never the box
+}
 
 // ==== seg_start.js ====
 let selEmpire=null;
@@ -2876,6 +2911,7 @@ $('logBtn').addEventListener('click',()=>toggleLog());
 $('helpBtn').addEventListener('click',showHelp);
 $('impBtn').addEventListener('click',importSave);
 buildStart();
+initGlobalKeys();
 try{
   const sv=JSON.parse(localStorage.getItem('aoc5save'));
   if(sv&&(sv.cellOwner||sv.provOwner)&&!sv.over){
