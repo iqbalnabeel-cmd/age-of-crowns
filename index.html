@@ -505,7 +505,8 @@ function removeUnits(a,n){
 // A fleet is an entity on a sea cell, exactly as an army is an entity on a land cell:
 // {e:empire, n:galleys, mv:cells used this turn, load:{unit:count} or null}.
 // The old model was a bag of counts per sea zone, which could not express position.
-const SHIP_SPEED=4;                 // cells per turn; Admiralty (sea tech 3) adds two
+const SHIP_SPEED=4.4;               // cells per turn; Admiralty (sea tech 3) adds two.
+const SEA_STEP=1.0;                 // one open-water crossing; the 0.4 tail leaves fleets mid-water
 const SHIP_CAPACITY=3;              // troops each galley can carry
 function shipSpeed(e){return SHIP_SPEED+(techLvOf(e,'sea')>=3?2:0);}
 function navyAt(sid){return (G.navy&&G.navy[sid])||null;}
@@ -552,14 +553,14 @@ function moveNavy(from,to,e){
   if(!f||f.e!==e||from===to)return 0;
   const mm=seaMap(from,e,fleetRange(f));
   if(!(to in mm.dist))return 0;
-  const cost=mm.dist[to];
+  const cost=mm.dist[to]*SEA_STEP;
   const tgt=navyAt(to);
   if(tgt&&tgt.e!==e)return 0;                      // strike it with navalClash instead
   f.mv=(f.mv||0)+cost;
   const path=seaPath(from,to,mm.parent)||[from,to];
   for(let i=0;i+1<path.length;i++)G.animQ.push({from:path[i],to:path[i+1],e,t:'ship',sea:1});
   if(tgt){tgt.n+=f.n;tgt.mv=Math.max(tgt.mv||0,f.mv);mergeLoad(tgt,f);}
-  else G.navy[to]=f;
+  else {delete f.to;delete f.p;G.navy[to]=f;}
   delete G.navy[from];
   return cost;
 }
@@ -585,18 +586,33 @@ function sailToward(from,to,e){
   if(!f||f.e!==e)return null;
   const path=seaFullPath(from,to,e);
   if(!path||path.length<2)return null;
-  const reach=fleetRange(f);
-  let step=from;
-  for(let i=1;i<path.length&&i<=reach;i++){
+  let budget=fleetRange(f);
+  let step=from,i=1;
+  while(i<path.length&&budget>=SEA_STEP-0.001){
     if(navyAt(path[i])&&navyAt(path[i]).e!==e)break;    // never barge into a hostile fleet
-    step=path[i];
+    budget-=SEA_STEP; step=path[i]; i++;
   }
-  if(step===from)return {moved:0,at:from,left:path.length-1};
+  const partialInto=(cur,rest)=>{        // spend whatever is left standing out on open water
+    const g=navyAt(cur);
+    if(!g||rest<=0||budget<=0.001)return false;
+    const nxt=path[i];
+    if(!nxt||(navyAt(nxt)&&navyAt(nxt).e!==e))return false;
+    const already=(g.to===nxt?(g.p||0):0)*SEA_STEP;
+    g.to=nxt; g.p=Math.min(0.95,(already+budget)/SEA_STEP);
+    g.mv=(g.mv||0)+budget; budget=0;
+    return true;
+  };
+  if(step===from){
+    // not even one full crossing left: stand out on the water part-way across
+    if(partialInto(from,path.length-1)){f.ord=to;return {moved:1,at:from,left:path.length-1,partial:1};}
+    return {moved:0,at:from,left:path.length-1};
+  }
   moveNavy(from,step,e);
   const fl=navyAt(step);
   const rest=(step===to)?null:seaFullPath(step,to,e);
   if(fl){
-    if(step===to)delete fl.ord; else fl.ord=to;
+    if(step===to){delete fl.ord;delete fl.to;delete fl.p;}
+    else {fl.ord=to; partialInto(step,rest?rest.length-1:0);}   // leftover sail carries onto the water
   }
   return {moved:1,at:step,left:rest?rest.length-1:0};
 }
@@ -921,11 +937,11 @@ function buildCadj(){
   for(const c in MAPD5.cells)CADJ[c]=[];
   MAPD5.adj.forEach(p=>{CADJ[p[0]].push(p[1]);CADJ[p[1]].push(p[0]);});
 }
-function forceRange(army,force){
+function forceRange(army,force){          // movement points left this turn, slowest unit sets the pace
   let r=Infinity;
   for(const t in force){
     if(!force[t])continue;
-    r=Math.min(r,spdOf(army.e,t));
+    r=Math.min(r,unitSpeedPts(army.e,t));
   }
   if(r===Infinity)return 0;
   return Math.max(0,r-(army.mv||0));
@@ -955,19 +971,23 @@ function sealedBorder(cid,e){
   return o!=='neutral'&&o!==e&&!hostileTo(e,o);
 }
 function marchMap5(fromCell,e,range){
+  // Dijkstra over movement cost. Hops used to all cost the same, so a breadth-first sweep was
+  // enough; now a road is cheaper than open country and the cheapest route is not the fewest steps.
   const dist={};dist[fromCell]=0;
   const parent={};
-  const q=[fromCell];
-  while(q.length){
-    const cur=q.shift();
-    const d=dist[cur];
-    if(d>=range)continue;
-    for(const nk of CADJ[cur]){
-      if(nk in dist)continue;
+  const seen={};
+  while(true){
+    let cur=null,best=Infinity;
+    for(const k in dist){if(!seen[k]&&dist[k]<best){best=dist[k];cur=k;}}
+    if(cur===null)break;
+    seen[cur]=1;
+    if(best>=range)continue;
+    if(cur!==fromCell&&isBlockedCell(cur,e))continue;   // you may reach it, not march through it
+    for(const nk of (CADJ[cur]||[])){
       if(sealedBorder(nk,e))continue;              // cannot enter a peaceful neighbour's land
-      dist[nk]=d+1;parent[nk]=cur;
-      const cell=cellOf(nk);
-      if(!isBlockedCell(nk,e))q.push(nk);
+      const nd=best+stepCost(cur,nk);
+      if(nd>range)continue;
+      if(!(nk in dist)||nd<dist[nk]){dist[nk]=nd;parent[nk]=cur;}
     }
   }
   return {dist,parent};
@@ -1038,6 +1058,29 @@ function takeForce5(cellId,want){
   if(!cnt(army.u))delete G.armies[cellId];
   return force;
 }
+// An army holds a cell, and may additionally be part-way along a leg toward `to` (progress `p`,
+// 0 to 1). Everything that asks "where is this army" for rules purposes still gets the cell it
+// holds; only the drawing, and interception later, care about the leg.
+function unitXY(cid,a){
+  const c=cellOf(cid);
+  if(!c)return null;
+  if(!a||!a.to||!a.p)return {x:c.x,y:c.y};
+  const d=cellOf(a.to);
+  if(!d){return {x:c.x,y:c.y};}
+  const k=Math.max(0,Math.min(0.95,a.p));      // never quite arrive visually; arrival moves the cell
+  return {x:c.x+(d.x-c.x)*k, y:c.y+(d.y-c.y)*k};
+}
+function seaXY(sid,f){
+  const c=SEA[sid];
+  if(!c)return null;
+  if(!f||!f.to||!f.p)return {x:c.x,y:c.y};
+  const d=SEA[f.to];
+  if(!d)return {x:c.x,y:c.y};
+  const k=Math.max(0,Math.min(0.95,f.p));
+  return {x:c.x+(d.x-c.x)*k, y:c.y+(d.y-c.y)*k};
+}
+function onTheMarch(a){return !!(a&&a.to&&a.p>0);}
+function clearLeg(a){if(a){delete a.to;delete a.p;}}
 function placeArmy(cellId,e,force,mv,w,dmap){
   const ex=G.armies[cellId];
   if(ex&&ex.e===e){
@@ -1291,31 +1334,47 @@ function advanceOrders(e){
     let cur=startCid;
     let live=G.armies[cur];
     if(!live||!live.ord||live.e!==e)continue;
-    const rng=forceRange(live,live.u);
-    let steps=0;
-    while(steps<rng){
+    let budget=forceRange(live,live.u);
+    const startMv=live.mv||0;
+    let spent=0;
+    let guard=0;
+    while(budget>0.001&&guard++<40){
       live=G.armies[cur];
-      if(!live||!live.ord){break;}
+      if(!live||!live.ord)break;
       const dest=live.ord;
       const path=fullPathTo(cur,dest,e);
-      if(!path||path.length<2){delete live.ord;break;}
+      if(!path||path.length<2){delete live.ord;clearLeg(live);break;}
       const nxt=path[1];
-      const cell=cellOf(nxt);
       if(isBlockedCell(nxt,e)){ // enemy/neutral army (incl. a garrisoned city) blocks the step
+        clearLeg(live);
         if(nxt===dest)delete live.ord;  // arrived adjacent to the target — clear order, let player assault
         break;
       }
-      // (undefended foreign cities are allowed: placeArmy captures them on entry)
+      const cost=stepCost(cur,nxt);
+      const already=(live.to===nxt?(live.p||0):0)*cost;     // progress already banked into this leg
+      const need=cost-already;
+      if(budget<need-0.001){
+        // Not enough to finish the crossing: bank what we have and stand on the road.
+        live.to=nxt;
+        live.p=Math.min(0.95,(already+budget)/cost);
+        live.mv=startMv+spent+budget;
+        budget=0;
+        break;
+      }
+      budget-=need; spent+=need;
+      clearLeg(live);
       const force=takeForce5(cur,live.u);
       if(!cnt(force))break;
       if(G.animQ)G.animQ.push({from:cur,to:nxt,e,t:domType(force)});
       const baseMv=G.armies[nxt]?G.armies[nxt].mv:0;
-      placeArmy(nxt,e,force,baseMv+1,false,G._takenD);
+      placeArmy(nxt,e,force,Math.max(baseMv,startMv+spent),false,G._takenD);
       const moved=G.armies[nxt];
       if(!moved)break;
+      clearLeg(moved);
+      moved.mv=Math.max(baseMv,startMv+spent);
       if(nxt===dest){delete moved.ord;break;}
       moved.ord=dest;
-      cur=nxt;steps++;
+      cur=nxt;
     }
   }
 }
@@ -1324,8 +1383,10 @@ function orderEtaTurns(cid){
   if(!a||!a.ord)return null;
   const path=fullPathTo(cid,a.ord,a.e);
   if(!path)return null;
-  const remaining=path.length-1;
-  const rng=Math.max(1,forceRange(a,a.u));
+  let remaining=0;
+  for(let i=0;i+1<path.length;i++)remaining+=stepCost(path[i],path[i+1]);
+  if(a.to&&a.p)remaining-=a.p*stepCost(cid,a.to);
+  const rng=Math.max(0.1,forceRange(a,a.u));
   return Math.max(1,Math.ceil(remaining/rng));
 }
 
@@ -1931,10 +1992,23 @@ function cellChain(fromCell,toCell,maxLen){ // shortest hop chain, ignoring who 
   }
   return null;
 }
+// ================= v5.6a: movement is a budget of points, not a count of hops =================
+// Entering a cell costs points. A road costs less, which is the first mechanical reason the road
+// network built in pass 2b has ever had to exist. Speeds carry a deliberate fractional tail so an
+// army habitually finishes its turn part-way into the next cell rather than snapping to a centre —
+// that leftover is the whole point: it is what makes a column look like it is marching.
+const COST_PLAIN=1.0, COST_ROAD=0.6;
+const SPEED_TAIL=0.4;                       // the remainder that leaves a unit mid-leg
+let ROADPAIR=null;                          // cell-pair keys that a road runs along
+function roadKey(a,b){return a<b?a+'|'+b:b+'|'+a;}
+function onRoad(a,b){return !!(ROADPAIR&&ROADPAIR[roadKey(a,b)]);}
+function stepCost(from,to){return onRoad(from,to)?COST_ROAD:COST_PLAIN;}
+function unitSpeedPts(owner,t){return spdOf(owner,t)+SPEED_TAIL;}
 let ROADS=null;
 function buildRoads(){
   if(ROADS)return;
   ROADS=[];
+  ROADPAIR={};
   const seen={};
   const cellProv={};for(const cid in MAPD5.cells)cellProv[cid]=MAPD5.cells[cid].p;
   for(const a in CADJ){
@@ -1947,6 +2021,7 @@ function buildRoads(){
       const A=provOf(pa),B=provOf(pb);
       // a road follows the land: hop cell to cell between the two cities, then smooth it
       const chain=cellChain(A.citycell,B.citycell,7);
+      if(chain)for(let i=0;i+1<chain.length;i++)ROADPAIR[roadKey(chain[i],chain[i+1])]=1;
       let pts;
       if(chain&&chain.length>2){
         pts=chain.map(c=>[MAPD5.cells[c].x,MAPD5.cells[c].y]);
@@ -2208,9 +2283,12 @@ function updateMap(){
   let ah='';
   for(const cid in G.armies){
     const a=G.armies[cid];
-    const c=MAPD5.cells[cid];
-    if(!c)continue;
-    if(c.city)continue;
+    const cc=MAPD5.cells[cid];
+    if(!cc)continue;
+    // A garrison folds into the city label, but the moment it steps onto the road it is an army in
+    // the field again and has to be visible — that was the whole point of marching out.
+    if(cc.city&&!onTheMarch(a))continue;
+    const c=unitXY(cid,a)||cc;
     const tot=cnt(a.u);
     if(!tot)continue;
     const col=empColor(a.e);
@@ -2272,7 +2350,7 @@ function updateMap(){
   let zh='';
   for(const sid in (G.navy||{})){
     const f=G.navy[sid];
-    const sc=SEA[sid];
+    const sc=seaXY(sid,G.navy[sid])||SEA[sid];
     if(!sc||!f.n)continue;
     const selCls=G.selSea===sid?' zsel':'';
     zh+='<g class="zone'+selCls+'" data-f="'+sid+'">';
