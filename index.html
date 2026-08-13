@@ -82,7 +82,8 @@ h1,h2,h3{font-weight:normal}
 .dcRow{display:flex;align-items:center;gap:8px;margin-top:7px;font-size:12.5px;color:var(--muted)}
 .dcRow b{color:var(--text)}
 .dcRow button{margin-left:auto;font-size:12px;padding:4px 10px;flex:none}
-#panel{padding:4px 12px 12px;overflow-y:auto}
+#panel{padding:4px 12px 12px;overflow-y:auto;flex:1 1 auto;min-height:0;-webkit-overflow-scrolling:touch}
+#dHead{flex:0 0 auto}
 #panel h3{color:var(--gold);font-size:16px;margin-bottom:6px}
 #panel .meta{color:var(--muted);font-size:13px;margin-bottom:8px}
 .utable{width:100%;font-size:13px;border-collapse:collapse;margin-bottom:8px}
@@ -187,7 +188,12 @@ h1,h2,h3{font-weight:normal}
   #drawer{top:auto;left:0;right:0;bottom:0;width:100%;max-width:100%;max-height:62%;border-left:none;border-top:1px solid var(--gold);border-radius:10px 10px 0 0;transform:translateY(105%)}
   #drawer.open{transform:translateY(0)}
   #drawer.open~#abar{display:none!important}
-  #mapwrap.drawered #zoomctl{right:12px;bottom:calc(62% + 10px)}   /* bottom sheet on phones: lift the controls above it */
+  #mapwrap.drawered #zoomctl{right:12px;bottom:calc(72% + 10px)}   /* bottom sheet on phones: lift the controls above it */
+  #drawer{max-height:72%}                    /* a building list needs more than 62% of a phone screen */
+  #abar{max-height:60%;width:98%;bottom:6px;padding:8px}
+  .rbtn .rlb{display:block;font-size:8.5px;line-height:1.1;text-align:center}   /* icon-only rail left every button a guess */
+  .rbtn .ric{font-size:17px}
+  #rail{width:58px}
   #logdrawer{width:86%}
   #hdr{gap:8px;padding:6px 8px}
   #hdr .title{display:none}
@@ -234,7 +240,7 @@ h1,h2,h3{font-weight:normal}
       <button class="rbtn" id="unitsBtn" title="Units"><span class="ric">&#9876;</span><span class="rlb">Units</span></button>
       <button class="rbtn" id="logBtn" title="Chronicle"><span class="ric">&#128220;</span><span class="rlb">Chronicle</span><span id="logBadge"></span></button>
       <button class="rbtn" id="expBtn" title="Save code"><span class="ric">&#128190;</span><span class="rlb">Save</span></button>
-      <button class="rbtn" id="animBtn" title="Toggle animations"><span class="ric">&#127916;</span><span class="rlb">Anim: on</span></button>
+      <button class="rbtn" id="animBtn" title="Turn marching animations on or off"><span class="ric">&#10227;</span><span class="rlb">Motion: on</span></button>
       <button class="rbtn" id="tiltBtn" title="Toggle 3D tilt"><span class="ric">&#128444;</span><span class="rlb">Tilt: on</span></button>
       <button class="rbtn" id="helpBtn" title="How to play"><span class="ric">?</span><span class="rlb">Help</span></button>
     </div>
@@ -556,6 +562,56 @@ function moveNavy(from,to,e){
   else G.navy[to]=f;
   delete G.navy[from];
   return cost;
+}
+// A destination beyond this turn's sail is not a dead end: the fleet goes as far as it can and
+// keeps going on its own each turn, the way armies already take standing march orders.
+function seaFullPath(from,to,e){
+  const dist={};dist[from]=0;const parent={};
+  const q=[from];
+  while(q.length){
+    const cur=q.shift();
+    if(cur===to)return seaPath(from,to,parent);
+    for(const nk of (SADJ[cur]||[])){
+      if(nk in dist)continue;
+      dist[nk]=dist[cur]+1;parent[nk]=cur;
+      if(nk===to)return seaPath(from,to,parent);
+      if(!seaBlocked(nk,e))q.push(nk);
+    }
+  }
+  return null;
+}
+function sailToward(from,to,e){
+  const f=navyAt(from);
+  if(!f||f.e!==e)return null;
+  const path=seaFullPath(from,to,e);
+  if(!path||path.length<2)return null;
+  const reach=fleetRange(f);
+  let step=from;
+  for(let i=1;i<path.length&&i<=reach;i++){
+    if(navyAt(path[i])&&navyAt(path[i]).e!==e)break;    // never barge into a hostile fleet
+    step=path[i];
+  }
+  if(step===from)return {moved:0,at:from,left:path.length-1};
+  moveNavy(from,step,e);
+  const fl=navyAt(step);
+  const rest=(step===to)?null:seaFullPath(step,to,e);
+  if(fl){
+    if(step===to)delete fl.ord; else fl.ord=to;
+  }
+  return {moved:1,at:step,left:rest?rest.length-1:0};
+}
+function advanceNavyOrders(e){
+  naviesOf(e).forEach(sid=>{
+    const f=G.navy[sid];
+    if(!f||!f.ord||f.ord===sid)return;
+    const dest=f.ord;
+    if(!SEA[dest]){delete f.ord;return;}
+    const r=sailToward(sid,dest,e);
+    if(!r||!r.moved){                       // boxed in by an enemy fleet — drop the order rather than loop
+      const still=navyAt(sid);
+      if(still)delete still.ord;
+    }
+  });
 }
 function navalClash(from,to,e){
   const a=navyAt(from),d=navyAt(to);
@@ -1030,6 +1086,8 @@ function checkWin(k){
   }
 }
 // ---- damage-pool battle (pass 3a): both sides trade damage; wounds persist between battles ----
+const BATTLE_ROUNDS=3;          // exchanges fought in a single assault before the attacker draws off
+const BREAK_OFF=0.6;            // fraction of the force below which the attack breaks off
 function battle5(fromCell,toCell,force,attackerKey,opts){
   const def=G.armies[toCell];
   const cell=cellOf(toCell);
@@ -1055,17 +1113,26 @@ function battle5(fromCell,toCell,force,attackerKey,opts){
     dMult*=1+0.15*bldLv(cell.p,'walls');               // walls: +15% per level
   }
   if(isCap)dMult*=1.15;
-  // volley phase: ranged units on both sides strike first (35% of their damage, before losses)
+  // Volley phase: ranged units on both sides strike first (35% of their damage, before losses).
   const av=dmgOutput(att.u,def.u,attackerKey,'ranged')*0.35*aMult;
   const dv=dmgOutput(def.u,att.u,def.e,'ranged')*0.35*dMult;
   rep.attVolley=sumKills(applyDamage(def,av));
   rep.defVolley=sumKills(applyDamage(att,dv));
-  // main exchange with survivors (melee full + ranged remaining 65%)
-  if(cnt(att.u)&&cnt(def.u)){
+  // Then the lines close, and keep closing. One click used to buy exactly one exchange, so a
+  // 35-strong army could bounce off a 9-man garrison simply because one round of damage could not
+  // chew through their hit points. A battle now runs up to BATTLE_ROUNDS exchanges and stops the
+  // moment either side breaks, so a lopsided fight is settled in a single assault while an even
+  // one still ends in both lines holding.
+  for(let round=0;round<BATTLE_ROUNDS&&cnt(att.u)&&cnt(def.u);round++){
     const am=(dmgOutput(att.u,def.u,attackerKey,'melee')+dmgOutput(att.u,def.u,attackerKey,'ranged')*0.65)*aMult;
     const dm=(dmgOutput(def.u,att.u,def.e,'melee')+dmgOutput(def.u,att.u,def.e,'ranged')*0.65)*dMult;
     applyDamage(def,am);          // simultaneous
     applyDamage(att,dm);
+    rep.rounds=round+1;
+    // A commander does not fight to the last man against a wall. If the assault has cost more than
+    // BREAK_OFF of the force and the garrison still stands, the attack draws off wounded instead of
+    // being annihilated — otherwise multi-round assaults turn every even fight into a massacre.
+    if(cnt(def.u)&&cnt(att.u)<attStart*BREAK_OFF)break;
   }
   rep.attLost=attStart-cnt(att.u);
   rep.defLost=defStart-cnt(def.u);
@@ -1510,6 +1577,7 @@ function aiTurn(k){
   // enemy fleet when clearly stronger, otherwise hold station. Roaming navies are pass 5c,
   // and half-building them here would only be thrown away.
   naviesOf(k).forEach(sid=>{G.navy[sid].mv=0;});
+  advanceNavyOrders(k);
   const ports=myProvs.filter(pid=>isPort(pid));
   let myFleet=0;naviesOf(k).forEach(sid=>{myFleet+=G.navy[sid].n;});
   if(ports.length&&e.gold>=SHIP.cost+20&&myFleet<4&&Math.random()<0.5){
@@ -1714,7 +1782,7 @@ function updateLogBadge(){
   b.style.display=(n&&!open)?'block':'none';
   b.textContent=n>9?'9+':n;
 }
-const HELP_HTML='<b>How to play:</b> tap an army figure, compose your force in the bar, press <b>Choose target</b>, then click any highlighted cell, city, or enemy army &mdash; hover previews the route; distant clicks set multi-turn march orders. Armies roam freely (foot 3 cells, cavalry 5, siege 2); attacking a defended city offers <b>Assault</b> or <b>Lay siege</b>. Units have HP and armor; wounded stacks heal each turn, fastest in your own cities. Cities recruit (tier 2-3 troops need <b>buildings</b>: Barracks, Archery Range, Stables; siege engines need a Workshop). Walls toughen garrisons and slow sieges. Coastal cities build War Galleys; holding a sea uncontested lets armies cross it. Research boosts damage 10%/level (2 per turn). You start <b>at peace</b> with every crown: their land is sealed until you declare war from the <b>Diplomacy</b> panel, while free lords (grey cities) may be attacked at any time. Enemy territory glows red. Buildings may only be raised in your <b>homeland</b> cities, and freshly conquered cities pay half tribute for 5 turns. First to hold 48 of 80 cities wins.';
+const HELP_HTML='<b>The goal</b><ul><li>Hold <b>48 of the 80 cities</b> to win.</li></ul><b>Moving armies</b><ul><li>Tap an army, choose how many troops to send in the bar, press <b>Choose target</b>, then tap where to go.</li><li>Foot march 3 cells a turn, cavalry 5, siege engines 2.</li><li>Tap somewhere far and the army takes a <b>standing order</b> &mdash; it marches on its own each turn until it arrives.</li><li>The small <b>dots</b> scattered over the map are cell centres. That dot is the exact point an army must reach to take the cell.</li></ul><b>Fighting</b><ul><li>Attacking a defended city offers <b>Assault</b> (fight now) or <b>Lay siege</b> (starve it out).</li><li>An assault fights several exchanges. If neither side breaks, your army falls back wounded &mdash; press again or regroup.</li><li>Units have hit points and armour. Wounds heal every turn, fastest inside your own cities.</li></ul><b>Cities</b><ul><li>Tier 1 troops can be raised anywhere you rule. Tier 2 and 3 need <b>buildings</b>: Barracks, Archery Range, Stables, and a Siege Workshop for any siege engine.</li><li>Buildings may only be raised in your <b>homeland</b>, or in a conquered city once you <b>annex</b> it.</li><li>A freshly conquered city pays half tribute for 5 turns while the unrest settles.</li><li>Walls toughen the garrison and slow a siege.</li></ul><b>The sea</b><ul><li><b>Port cities</b> build War Galleys from the Recruit tab. The galley appears on the water beside the city.</li><li>Fleets sail 4 sea cells a turn, 6 once you have Admiralty. An enemy fleet blocks the way &mdash; you may strike it, but not sail past it.</li><li>Armies cross water by <b>boarding a fleet</b>: 3 troops per galley. Sail, then land them on a shore you choose. They cannot march the turn they come ashore.</li><li>An enemy fleet sitting on your harbour blockades it and stops you building ships there.</li></ul><b>Diplomacy</b><ul><li>You begin <b>at peace</b> with every crown. Their borders are sealed until you declare war from the <b>Diplomacy</b> panel.</li><li>Free lords &mdash; the grey cities &mdash; may be attacked at any time.</li><li>Enemy land is tinted red and hatched. Declaring war costs no gold, but every other crown thinks less of you.</li></ul><b>Research</b><ul><li>Two researches a turn. Each level adds 10% damage to its track.</li></ul>';
 function showHelp(){showModal('How to play',HELP_HTML,[['Close',closeModal,'primary']]);}
 // garrison strength band for cities you do not own (no exact numbers — Nabeel's fog rule)
 function garrisonBand(n){
@@ -2497,12 +2565,7 @@ function openCityPanel(pid){
       }
     }
     if(mine&&!G.over){
-      if(isPort(pid)){
-        const blockaded=!portCellsFree(pid,G.player).length;
-        h+='<div class="buildrow"><span>'+uicon('ship')+SHIP.name+' &mdash; '+SHIP.cost+'g<br><span style="color:var(--muted);font-size:11.5px">'+
-           (blockaded?'An enemy fleet blockades this port.':'Sails from this harbour, carries '+SHIP_CAPACITY+' troops')+'</span></span>'+
-           '<button '+((e.gold<SHIP.cost||blockaded)?'disabled':'')+' onclick="buyShip(\''+pid+'\')">Buy</button></div>';
-      }else h+='<div class="meta">Inland city &mdash; no harbour.</div>';
+      h+='<div class="meta">'+(isPort(pid)?'&#9875; <b>Port city</b> &mdash; build galleys from the Recruit tab.':'Inland city &mdash; no harbour.')+'</div>';
     }
   }
   if(mine&&!G.over&&tab==='rec'){
@@ -2511,6 +2574,12 @@ function openCityPanel(pid){
     const capT=RECRUIT_CAP+2*bldLv(pid,'granary');
     const cappedT=rc>=capT;
     h+='<h3 style="font-size:14px">Recruit</h3>';
+    if(isPort(pid)){                          // players look for ships under Recruit, not Overview
+      const blockaded=!portCellsFree(pid,G.player).length;
+      h+='<div class="buildrow"><span>'+uicon('ship')+'<b>'+SHIP.name+'</b> &mdash; '+SHIP.cost+'g<br><span style="color:var(--muted);font-size:11.5px">'+
+         (blockaded?'An enemy fleet blockades this harbour.':'Sails from this harbour &middot; carries '+SHIP_CAPACITY+' troops')+'</span></span>'+
+         '<button '+((e.gold<SHIP.cost||blockaded)?'disabled':'')+' onclick="buyShip(\''+pid+'\')">Buy</button></div>';
+    }
     h+='<div class="meta" style="font-size:11px">Each unit lists <b>dmg</b> (damage it deals each round), <b>hp</b> (damage it can absorb) and <b>armour</b> (subtracted from every hit it takes).</div>';
     h+='<div class="meta">Mustered this turn: '+rc+'/'+capT+(cappedT?' &mdash; the muster is full until next turn':'')+' &middot; training takes 1 turn (tier 1), 2 (tier 2), 3 (tier 3)</div>';
     const tq=queueOf(pid);
@@ -2709,6 +2778,7 @@ function endTurn(){
       G.animQ=[];
       resolveSieges(G.player);
       advanceOrders(G.player);
+      advanceNavyOrders(G.player);     // fleets carry on toward their destination too
       healArmies(G.player);            // wounds mend: cities 50%, own land 25%, abroad 10%
       processBuilds(G.player);         // construction advances
       processTraining(G.player);       // recruits finish training
@@ -2799,11 +2869,19 @@ function seaClick(sid){
       }
       const cost=moveNavy(G.selSea,sid,G.player);
       if(cost){
+        const arrived=navyAt(sid); if(arrived)delete arrived.ord;
         G.seaTargeting=false;G.selSea=sid;
         playAnims(()=>{renderAll();openSeaPanel(sid);saveGame();});
         return;
       }
-      toast('Out of range — your galleys have '+fleetRange(me)+' cells of sail left.');
+      const r=sailToward(G.selSea,sid,G.player);       // too far for one turn: sail as far as we can
+      if(r&&r.moved){
+        G.seaTargeting=false;G.selSea=r.at;
+        log('Your fleet sets a course &mdash; '+r.left+' cell'+(r.left===1?'':'s')+' still to run.');
+        playAnims(()=>{renderAll();openSeaPanel(r.at);saveGame();});
+        return;
+      }
+      toast('No sea route there — an enemy fleet may be in the way.');
       return;
     }
   }
@@ -2830,6 +2908,12 @@ function openSeaPanel(sid){
   let h='<div class="meta">'+empName(f.e)+' &middot; '+f.n+' galley'+(f.n>1?'s':'')+'</div>';
   if(mine){
     h+='<div class="meta">Sail left this turn: <b>'+fleetRange(f)+'</b> of '+shipSpeed(G.player)+' cells</div>';
+    if(f.ord&&SEA[f.ord]){
+      const rest=seaFullPath(sid,f.ord,G.player);
+      const legs=rest?rest.length-1:0;
+      const turns=Math.max(1,Math.ceil(legs/shipSpeed(G.player)));
+      h+='<div class="buildrow"><span>&#9973; Sailing on &mdash; '+legs+' cell'+(legs===1?'':'s')+' to go, about '+turns+' turn'+(turns===1?'':'s')+'</span><button onclick="cancelSail(\''+sid+'\')">Cancel</button></div>';
+    }
     const carried=loadCount(f);
     h+='<div class="meta">Hold: '+carried+' / '+(f.n*SHIP_CAPACITY)+' troops</div>';
     if(carried){
@@ -2855,6 +2939,11 @@ function openSeaPanel(sid){
   }
   $('panel').innerHTML=h;
   showDrawer((mine?'Your fleet':empName(f.e)+' fleet'));
+}
+function cancelSail(sid){
+  const f=navyAt(sid);
+  if(f)delete f.ord;
+  renderAll();openSeaPanel(sid);saveGame();
 }
 function uiEmbark(sid,cid){
   const n=doEmbark(sid,cid);
@@ -3052,7 +3141,7 @@ function buildStart(){
     buildCadj();
     initMap();
     initInput();
-    if(window.innerWidth<761){$('mapwrap').classList.remove('tilted');setRailLbl('tiltBtn','Tilt: off');}
+    if(window.innerWidth<761){$('mapwrap').classList.remove('tilted');setRailLbl('tiltBtn','Tilt: off');}   // the 3D tilt softens the map on small screens
     renderAll();
     saveGame();
     const cap=provOf(EMPIRES[selEmpire].cap);
@@ -3078,7 +3167,7 @@ function refreshStart(){
 $('endTurn').addEventListener('click',endTurn);
 $('unitsBtn').addEventListener('click',showUnitCards);
 $('techBtn').addEventListener('click',showTech);
-$('animBtn').addEventListener('click',()=>{ANIM_ON=!ANIM_ON;setRailLbl('animBtn','Anim: '+(ANIM_ON?'on':'off'));});
+$('animBtn').addEventListener('click',()=>{ANIM_ON=!ANIM_ON;setRailLbl('animBtn','Motion: '+(ANIM_ON?'on':'off'));});
 $('expBtn').addEventListener('click',exportSave);
 $('logBtn').addEventListener('click',()=>toggleLog());
 $('helpBtn').addEventListener('click',showHelp);
