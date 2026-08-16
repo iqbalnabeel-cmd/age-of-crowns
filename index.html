@@ -1506,6 +1506,23 @@ function nearestTargetCity(fromCell,e,maxD){
   }
   return found;
 }
+// Spend whatever movement an AI column has left standing out on the road, exactly as
+// advanceOrders does for the player. Without this the AI always finished on a cell centre.
+function aiBankLeftover(cid,k){
+  const a=G.armies[cid];
+  if(!a||a.e!==k||!a.ord)return;
+  const left=forceRange(a,a.u);
+  if(left<=0.001)return;
+  const path=fullPathTo(cid,a.ord,k);
+  if(!path||path.length<2)return;
+  const nxt=path[1];
+  if(isBlockedCell(nxt,k)||sealedBorder(nxt,k))return;
+  const cost=stepCost(cid,nxt);
+  if(left>=cost-0.001)return;                 // enough for a whole crossing: advanceOrders will take it
+  a.to=nxt;
+  a.p=Math.min(0.95,left/cost);
+  a.mv=(a.mv||0)+left;
+}
 function aiArmyAct(k,cid,want,P,D){
   const tgt=nearestTargetCity(cid,k,7);
   if(!tgt)return false;
@@ -1520,16 +1537,32 @@ function aiArmyAct(k,cid,want,P,D){
     if(!gar||Sa/Sd>P.thr+D.thr)dest=tgt.cell;
   }
   if(!dest){
-    const rng=forceRange(army,want);
+    // Range is movement POINTS now, not a count of hops, so it cannot be used as a path index —
+    // path[3.4] is undefined, which silently killed the AI's advance after v5.6a part 1. Walk the
+    // path spending points, and let whatever is left ride as an order so the column keeps going
+    // next turn and can finish part-way along a leg like the player's does.
     const path=marchPath5(cid,tgt.cell,tgt.parent);
-    if(path)for(let i=Math.min(rng,path.length-2);i>=1;i--){
-      const step=path[i];
-      if(info.targets[step]&&(!G.armies[step]||G.armies[step].e===k)){dest=step;break;}
+    if(path){
+      let budget=forceRange(army,want);
+      for(let i=1;i<path.length-1;i++){
+        const step=path[i];
+        const c=stepCost(path[i-1],step);
+        if(budget<c-0.001)break;
+        if(!info.targets[step]||(G.armies[step]&&G.armies[step].e!==k))break;
+        budget-=c; dest=step;
+      }
     }
   }
   if(dest&&dest!==cid){
     const r=executeMarch(cid,dest,want,false,k);
     if(r&&r.type==='battle')logBattle5(r.rep);
+    // keep marching next turn, and bank the leftover so the column stands on the road rather than
+    // snapping to a cell centre the way AI armies did before
+    const moved=G.armies[dest];
+    if(moved&&moved.e===k&&dest!==tgt.cell&&(!r||r.type!=='battle')){
+      moved.ord=tgt.cell;
+      aiBankLeftover(dest,k);
+    }
     return true;
   }
   // couldn't win an assault this turn: if adjacent to the target city with a real force, dig in and besiege
@@ -1675,6 +1708,7 @@ function aiTurn(k){
       break;
     }
   });
+  advanceOrders(k);                 // AI columns under standing orders march on the same budget
   const list=armiesOf(k);
   const acted=new Set();
   list.forEach(cid=>{
@@ -2769,7 +2803,8 @@ function renderBar(){
   h+='</div></div>';
   h+='<div class="dcAct"><div><button onclick="setSendAll(1)">All</button><button onclick="setSendAll(0)">None</button></div>';
   h+='<button '+(G.forced?'class="primary"':'')+' onclick="toggleForced()" title="+2 cells, arrive winded (-20% until next turn)">Forced march</button>';
-  h+='<button class="primary" onclick="startTargeting()">'+(G.targeting?'Click a target...':'Choose target')+'</button></div>';
+  h+='<div><button class="primary" onclick="startTargeting()">'+(G.targeting?'Click a target...':'Choose target')+'</button>'+
+     ((a.ord||onTheMarch(a))?'<button onclick="holdArmy(\''+G.selArmy+'\')" title="Stop here, holding the ground you have crossed">Hold</button>':'')+'</div></div>';
   h+='</div>';
   if(a.siege){                          // CoN-style status rows inside the division card
     const sgar=G.armies[a.siege];
@@ -3006,7 +3041,7 @@ function openSeaPanel(sid){
       const rest=seaFullPath(sid,f.ord,G.player);
       const legs=rest?rest.length-1:0;
       const turns=Math.max(1,Math.ceil(legs/shipSpeed(G.player)));
-      h+='<div class="buildrow"><span>&#9973; Sailing on &mdash; '+legs+' cell'+(legs===1?'':'s')+' to go, about '+turns+' turn'+(turns===1?'':'s')+'</span><button onclick="cancelSail(\''+sid+'\')">Cancel</button></div>';
+      h+='<div class="buildrow"><span>&#9973; Sailing on &mdash; '+legs+' cell'+(legs===1?'':'s')+' to go, about '+turns+' turn'+(turns===1?'':'s')+'</span><button onclick="holdFleet(\''+sid+'\')">Hold</button></div>';
     }
     const carried=loadCount(f);
     h+='<div class="meta">Hold: '+carried+' / '+(f.n*SHIP_CAPACITY)+' troops</div>';
@@ -3033,6 +3068,23 @@ function openSeaPanel(sid){
   }
   $('panel').innerHTML=h;
   showDrawer((mine?'Your fleet':empName(f.e)+' fleet'));
+}
+function holdArmy(cid){
+  const a=G.armies[cid];
+  if(!a)return;
+  const wasMarching=onTheMarch(a);
+  delete a.ord;                       // stop marching, but keep the ground already crossed
+  log(wasMarching
+    ? 'Your column halts on the road near '+provOf(cellOf(cid).p).city+'.'
+    : 'Your army holds position near '+provOf(cellOf(cid).p).city+'.');
+  renderAll();renderBar();saveGame();
+}
+function holdFleet(sid){
+  const f=navyAt(sid);
+  if(!f)return;
+  delete f.ord;
+  log('Your fleet heaves to and holds station.');
+  renderAll();openSeaPanel(sid);saveGame();
 }
 function cancelSail(sid){
   const f=navyAt(sid);
