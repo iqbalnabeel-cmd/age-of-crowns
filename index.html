@@ -89,7 +89,9 @@ h1,h2,h3{font-weight:normal}
 .utable{width:100%;font-size:13px;border-collapse:collapse;margin-bottom:8px}
 .utable td{padding:3px 4px;border-bottom:1px solid #3a3025}
 .utable td:last-child{text-align:right}
-.buildrow{display:flex;align-items:center;justify-content:space-between;font-size:13px;margin:3px 0}
+.buildrow{display:flex;align-items:center;justify-content:space-between;gap:8px;font-size:13px;margin:3px 0}
+.buildrow>span{min-width:0;flex:1 1 auto;overflow-wrap:anywhere}
+.buildrow>button{flex:0 0 auto}
 .buildrow button{padding:2px 10px;font-size:13px}
 .steprow{display:flex;align-items:center;justify-content:space-between;font-size:13px;margin:3px 0}
 .steprow input{width:52px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-family:inherit}
@@ -151,6 +153,7 @@ h1,h2,h3{font-weight:normal}
 .pill.ok{border-color:#5aa858;color:#7ec97e}
 .pill.bad{border-color:var(--danger);color:var(--danger)}
 .dcBody{display:flex;gap:9px;align-items:stretch}
+.dcTop{display:flex;gap:9px;align-items:stretch;flex:1;min-width:0}
 .dcSum{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:7px 10px;text-align:center;flex:none;display:flex;flex-direction:column;justify-content:center;gap:1px}
 .dcSum .lb{font-size:9.5px;color:var(--muted);letter-spacing:1px}
 .dcSum .vl{font-size:16px;font-weight:bold}
@@ -190,13 +193,26 @@ h1,h2,h3{font-weight:normal}
   #drawer.open~#abar{display:none!important}
   #mapwrap.drawered #zoomctl{right:12px;bottom:calc(72% + 10px)}   /* bottom sheet on phones: lift the controls above it */
   #drawer{max-height:72%}                    /* a building list needs more than 62% of a phone screen */
-  #abar{max-height:60%;width:98%;bottom:6px;padding:8px}
-  .rbtn .rlb{display:block;font-size:8.5px;line-height:1.1;text-align:center}   /* icon-only rail left every button a guess */
+  #abar{max-height:62%;width:98%;bottom:6px;padding:8px}
+  .dcBody{flex-direction:column;gap:8px}                 /* stack: summary+tiles, then actions */
+  .dcTop{display:flex;gap:8px;align-items:stretch;min-width:0}
+  .dcTiles{-webkit-overflow-scrolling:touch}
+  .dcAct{flex-direction:row;flex-wrap:wrap;justify-content:stretch}
+  .dcAct>div{flex:1 1 100%}
+  .dcAct button{flex:1 1 auto;padding:9px 8px;font-size:13px}
+  .dcHead{gap:6px;margin-bottom:6px}
+  .dcTitle{font-size:15px}
+  .rbtn .rlb{display:block;font-size:8px;line-height:1.05;text-align:center;white-space:normal;overflow-wrap:anywhere}
+  .rbtn{padding:6px 1px}
   .rbtn .ric{font-size:17px}
   #rail{width:58px}
   #logdrawer{width:86%}
-  #hdr{gap:8px;padding:6px 8px}
+  #hdr{gap:6px;padding:5px 7px;flex-wrap:nowrap;overflow-x:auto}
   #hdr .title{display:none}
+  #hdr .stat{font-size:12px;white-space:nowrap}
+  #hdr .empbadge{font-size:12px}
+  #hdr .empbadge span:not(.dot){display:none}      /* the crest colour is enough on a phone */
+  #hdr .right{flex:0 0 auto}
   button{padding:8px 12px}
   .buildrow button{padding:6px 14px}
 }
@@ -2738,7 +2754,7 @@ function renderBar(){
   let h='<div class="dcHead"><span class="crest" style="background:'+col+'"></span>';
   h+='<div class="dcT"><div class="dcTitle">'+(onCity?'Garrison of ':'Army near ')+pv.city+'</div><div class="dcSub">'+empName(G.player)+' &middot; '+tot+' troops</div></div>';
   h+='<span class="pill '+stCls+'">'+status+'</span><span class="pill">Range '+rng+'</span></div>';
-  h+='<div class="dcBody">';
+  h+='<div class="dcBody"><div class="dcTop">';
   h+='<div class="dcSum"><div class="lb">TROOPS</div><div class="vl">'+tot+'</div><div class="lb">STRENGTH</div><div class="vl">~'+str+'</div><div class="lb">SENDING</div><div class="vl gold">'+sending+'/'+tot+'</div></div>';
   h+='<div class="dcTiles">';
   UKEYS.forEach(t=>{
@@ -2750,7 +2766,7 @@ function renderBar(){
     h+='<div class="rbar" title="'+hpPct+'% strength"><div style="width:'+hpPct+'%'+(hpPct<50?';background:#c94040':(hpPct<85?';background:#c9a227':''))+'"></div></div>';
     h+='<div class="tstep"><button onclick="bumpSend(\''+t+'\',-1)">&minus;</button><span>'+wsel[t]+'</span><button onclick="bumpSend(\''+t+'\',1)">+</button></div></div>';
   });
-  h+='</div>';
+  h+='</div></div>';
   h+='<div class="dcAct"><div><button onclick="setSendAll(1)">All</button><button onclick="setSendAll(0)">None</button></div>';
   h+='<button '+(G.forced?'class="primary"':'')+' onclick="toggleForced()" title="+2 cells, arrive winded (-20% until next turn)">Forced march</button>';
   h+='<button class="primary" onclick="startTargeting()">'+(G.targeting?'Click a target...':'Choose target')+'</button></div>';
