@@ -104,6 +104,7 @@ h1,h2,h3{font-weight:normal}
 .roadcase{stroke:#6b573a;stroke-width:3.4;stroke-linecap:round;opacity:0.3;vector-effect:non-scaling-stroke;pointer-events:none}
 .cellpip{fill:#7a684a;opacity:0.4;pointer-events:none}
 .cell.target{stroke:var(--gold);stroke-width:1.6;stroke-dasharray:3 2.4}
+.cell.icept{stroke:#fffbe8;stroke-width:3.2;stroke-dasharray:4 2.4;stroke-opacity:1;fill:#b5382c!important}
 .cell.pathhl{stroke:#fffbe8;stroke-width:1.8}
 .cell.occupied{stroke:#6e5a3a;stroke-width:0.9;stroke-dasharray:2.4 1.8}
 .cell.atwar{stroke:#a33636;stroke-width:1.1;vector-effect:non-scaling-stroke}
@@ -1097,6 +1098,27 @@ function seaXY(sid,f){
 }
 function onTheMarch(a){return !!(a&&a.to&&a.p>0);}
 function clearLeg(a){if(a){delete a.to;delete a.p;}}
+function onCityCell(cid){const c=cellOf(cid);return !!(c&&c.city);}
+// ---- v5.6a part 3: which enemy columns can an army standing on `fromCid` reach? ----
+// A column is strung out along the leg it is crossing, so it is exposed at BOTH ends of that leg:
+// beside the ground it left and beside the ground it is heading for. That second reach is the whole
+// point — a road lets an army outrun the cells it passes, and this is what makes the road cost
+// something. A column that has not left its own city walls is not strung out and cannot be struck.
+function interceptTargets(fromCid,e){
+  const out={};
+  const adj=CADJ[fromCid]||[];
+  if(!adj.length)return out;
+  for(const cid in G.armies){
+    const col=G.armies[cid];
+    if(cid===fromCid||!onTheMarch(col))continue;
+    if(col.e===e||!hostileTo(e,col.e))continue;
+    if(onCityCell(cid))continue;                 // still behind its own walls
+    if(sealedBorder(cid,e))continue;             // a treaty's ground bars the strike
+    if(adj.includes(cid))out[cid]={d:0,icept:true,far:false};
+    else if(adj.includes(col.to))out[cid]={d:0,icept:true,far:true};
+  }
+  return out;
+}
 function placeArmy(cellId,e,force,mv,w,dmap){
   const ex=G.armies[cellId];
   if(ex&&ex.e===e){
@@ -1208,6 +1230,81 @@ function battle5(fromCell,toCell,force,attackerKey,opts){
   }
   return rep;
 }
+// ================= v5.6a part 3: interception =================
+// A column caught on the road is not a formed army. It fights at a penalty, it is never annihilated,
+// and what it really loses is the march: the leg it had banked and the standing order behind it.
+// That loss is the cost that balances the speed a road buys — before this, a road was pure upside.
+const INTERCEPT_STRUNG=0.6;     // a column defends at 60%: it cannot form a line on the march
+const INTERCEPT_ROUNDS=2;       // a raid, not a set-piece battle
+const INTERCEPT_FLOOR=0.4;      // it breaks off and falls back at 40% rather than standing and dying
+// Damage a column, but never past the floor. Anything the floor would have killed is handed back as
+// a survivor carrying most of a wound: the rear ranks broke away before the enemy reached them.
+// Without this a single strike could wipe a column outright, which is the one thing it must not do.
+function damageColumn(col,raw,floor){
+  const kills=applyDamage(col,raw);
+  let short=floor-cnt(col.u);
+  if(short>0){
+    const types=Object.keys(kills).sort((a,b)=>kills[b]-kills[a]);
+    for(const t of types){
+      while(short>0&&kills[t]>0){
+        col.u[t]=(col.u[t]||0)+1;kills[t]--;short--;
+        col.d=col.d||{};
+        col.d[t]=(col.d[t]||0)+UNITS[t].hp*0.75;      // they got away, barely
+      }
+      if(short<=0)break;
+    }
+  }
+  return sumKills(kills);
+}
+function intercept5(fromCell,colCell,force,attackerKey,opts){
+  const col=G.armies[colCell];
+  const dmap=(opts&&opts.dmap)||{};
+  const rep={fromCell,colCell,attackerKey,defOwner:col?col.e:'neutral',
+             attVolley:0,attLost:0,defLost:0,broke:false,icept:true,rounds:0};
+  if(!col||!cnt(col.u)){placeArmy(fromCell,attackerKey,force,99,false,dmap);return rep;}
+  if(G.animQ&&!(opts&&opts.noAnim))G.animQ.push({from:fromCell,to:colCell,e:attackerKey,t:domType(force)});
+  const att={u:force,d:dmap};
+  const attStart=cnt(att.u), defStart=cnt(col.u);
+  const floor=Math.max(1,Math.ceil(defStart*INTERCEPT_FLOOR));
+  const aMult=rand(0.9,1.1);
+  const dMult=rand(0.9,1.1)*INTERCEPT_STRUNG*(1-0.2*(col.w?1:0));
+  // the ambusher looses first into a column that cannot answer in order
+  rep.attVolley=damageColumn(col,dmgOutput(att.u,col.u,attackerKey,'ranged')*0.35*aMult,floor);
+  for(let r=0;r<INTERCEPT_ROUNDS&&cnt(att.u)&&cnt(col.u)>floor;r++){
+    const am=(dmgOutput(att.u,col.u,attackerKey,'melee')+dmgOutput(att.u,col.u,attackerKey,'ranged')*0.65)*aMult;
+    const dm=(dmgOutput(col.u,att.u,col.e,'melee')+dmgOutput(col.u,att.u,col.e,'ranged')*0.65)*dMult;
+    damageColumn(col,am,floor);
+    applyDamage(att,dm);
+    rep.rounds=r+1;
+  }
+  rep.attLost=attStart-cnt(att.u);
+  rep.defLost=defStart-cnt(col.u);
+  rep.broke=cnt(col.u)<=floor;
+  // the survivors fall back onto the cell they still hold: leg lost, order cancelled, done for the turn
+  clearLeg(col);
+  delete col.ord;
+  delete col.siege;
+  col.mv=99;
+  col.w=1;
+  if(!cnt(col.u))delete G.armies[colCell];       // belt and braces; the floor should prevent this
+  if(cnt(att.u))placeArmy(fromCell,attackerKey,att.u,99,false,att.d);   // the raiders keep their own ground
+  return rep;
+}
+function oddsOfIntercept(force,colCell,attackerKey){
+  const col=G.armies[colCell];
+  if(!col||!cnt(col.u))return 1;
+  const Sa=strength(force,col.u,false,false,attackerKey);
+  const Sd=Math.max(strength(col.u,force,false,false,col.e)*INTERCEPT_STRUNG*(1-0.2*(col.w?1:0)),0.01);
+  const pa=Math.max(1,poolOf({u:force}));
+  const pd=Math.max(1,poolOf(col));
+  const xa=Sa/pd, xd=Sd/pa;
+  return Math.pow(xa,2)/(Math.pow(xa,2)+Math.pow(xd,2));
+}
+function logIntercept(rep){
+  const who=empName(rep.attackerKey), def=empName(rep.defOwner);
+  log(who+' fell on '+def+"'s column on the march (slew "+rep.defLost+', lost '+rep.attLost+'). '+
+      (rep.broke?'The column broke and fell back.':'The column fought clear, but lost the crossing.'));
+}
 // heal wounds at the start of an empire's turn: cities 50%, own land 25%, foreign land 10% of each unit's HP
 function healArmies(e){
   for(const cid of armiesOf(e)){
@@ -1256,6 +1353,13 @@ function executeMarch(fromCell,toCell,want,forced,attackerKey){
   const isForced=!!forced&&!tg.sea&&tg.d>preRange;
   const fdmap=G._takenD;
   const defArmy=G.armies[toCell];
+  // You cannot fight a formed battle against an army that is strung out on a road. Any attack that
+  // lands on a column resolves as an interception instead, wherever it came from.
+  if(defArmy&&defArmy.e!==attackerKey&&onTheMarch(defArmy)&&!onCityCell(toCell)){
+    const adj=CADJ[fromCell]||[];
+    if(adj.includes(toCell)||adj.includes(defArmy.to))
+      return {type:'intercept',rep:intercept5(fromCell,toCell,force,attackerKey,{dmap:fdmap})};
+  }
   if(defArmy&&defArmy.e!==attackerKey){
     if(!tg.sea&&tg.d>1&&G.animQ){
       const bpath=marchPath5(fromCell,toCell,info.parent);
@@ -1523,6 +1627,59 @@ function aiBankLeftover(cid,k){
   a.p=Math.min(0.95,left/cost);
   a.mv=(a.mv||0)+left;
 }
+// An AI army standing beside an enemy column strikes it when it has the better of the exchange.
+// The bar is deliberately low (an even fight is worth taking): a strike costs the AI one turn of
+// movement and costs the marcher the whole march, so the trade is good even when the losses are not.
+function aiIntercept(k,cid,want,P,D){
+  const opts=interceptTargets(cid,k);
+  let best=null;
+  for(const target in opts){
+    if(!G.armies[target])continue;
+    if(G.armies[target].e===G.player&&G.turn<=D.grace)continue;
+    const p=oddsOfIntercept(want,target,k);
+    if(p<0.45)continue;
+    if(!best||p>best.p)best={cell:target,p};
+  }
+  if(!best)return false;
+  const src=G.armies[cid];
+  const keep={ord:src&&src.ord,siege:src&&src.siege};   // a sortie is not a change of plan
+  const force=takeForce5(cid,want);
+  if(!cnt(force))return false;
+  logIntercept(intercept5(cid,best.cell,force,k,{dmap:G._takenD}));
+  // takeForce5 deletes the army when it empties a cell, and intercept5 then rebuilds it from
+  // scratch — which would silently drop a siege or a standing order. Put them back.
+  const back=G.armies[cid];
+  if(back&&back.e===k){
+    if(keep.ord&&!back.ord)back.ord=keep.ord;
+    if(keep.siege&&!back.siege)back.siege=keep.siege;
+  }
+  return true;
+}
+// Interception gets its own sweep before the marching pass, over EVERY army the empire has.
+// Folding it into aiArmyAct was not enough: the main loop skips city garrisons under 6 troops, and
+// those garrisons are most of the map — a column could walk past a walled city and never be touched.
+// A garrison sallies out to strike, but never empties its own walls to do it.
+function aiInterceptPass(k,P,D){
+  const struck=[];
+  for(const cid of armiesOf(k)){
+    const a=G.armies[cid];
+    if(!a||a.e!==k)continue;
+    if(forceRange(a,a.u)<=0)continue;             // already spent this turn
+    if(!Object.keys(interceptTargets(cid,k)).length)continue;
+    // A garrison and a besieger both sortie rather than march: they detach a striking force and
+    // hold the rest in place, so the walls stay manned and the siege lines are never abandoned.
+    // (Beating a relief column off the siege works is the classic case for this whole mechanic.)
+    const hold=(a.siege||(onCityCell(cid)&&ownerOf(cellOf(cid).p)===k))?2:0;
+    let want;
+    if(hold){
+      if(cnt(a.u)<=hold)continue;                 // too thin to spare anyone
+      want={};let kept=0;
+      UKEYS.forEach(t=>{let n=a.u[t]||0;while(n>0&&kept<hold){kept++;n--;}if(n>0)want[t]=n;});
+    }else want={...a.u};
+    if(cnt(want)&&aiIntercept(k,cid,want,P,D))struck.push(cid);
+  }
+  return struck;
+}
 function aiArmyAct(k,cid,want,P,D){
   const tgt=nearestTargetCity(cid,k,7);
   if(!tgt)return false;
@@ -1556,6 +1713,7 @@ function aiArmyAct(k,cid,want,P,D){
   if(dest&&dest!==cid){
     const r=executeMarch(cid,dest,want,false,k);
     if(r&&r.type==='battle')logBattle5(r.rep);
+    else if(r&&r.type==='intercept')logIntercept(r.rep);
     // keep marching next turn, and bank the leftover so the column stands on the road rather than
     // snapping to a cell centre the way AI armies did before
     const moved=G.armies[dest];
@@ -1710,7 +1868,7 @@ function aiTurn(k){
   });
   advanceOrders(k);                 // AI columns under standing orders march on the same budget
   const list=armiesOf(k);
-  const acted=new Set();
+  const acted=new Set(aiInterceptPass(k,P,D));   // strike passing columns first; those armies are then spent
   list.forEach(cid=>{
     if(G.over||acted.has(cid))return;
     const army=G.armies[cid];
@@ -1893,7 +2051,7 @@ function updateLogBadge(){
   b.style.display=(n&&!open)?'block':'none';
   b.textContent=n>9?'9+':n;
 }
-const HELP_HTML='<b>The goal</b><ul><li>Hold <b>48 of the 80 cities</b> to win.</li></ul><b>Moving armies</b><ul><li>Tap an army, choose how many troops to send in the bar, press <b>Choose target</b>, then tap where to go.</li><li>Foot march 3 cells a turn, cavalry 5, siege engines 2.</li><li>Tap somewhere far and the army takes a <b>standing order</b> &mdash; it marches on its own each turn until it arrives.</li><li>The small <b>dots</b> scattered over the map are cell centres. That dot is the exact point an army must reach to take the cell.</li></ul><b>Fighting</b><ul><li>Attacking a defended city offers <b>Assault</b> (fight now) or <b>Lay siege</b> (starve it out).</li><li>An assault fights several exchanges. If neither side breaks, your army falls back wounded &mdash; press again or regroup.</li><li>Units have hit points and armour. Wounds heal every turn, fastest inside your own cities.</li></ul><b>Cities</b><ul><li>Tier 1 troops can be raised anywhere you rule. Tier 2 and 3 need <b>buildings</b>: Barracks, Archery Range, Stables, and a Siege Workshop for any siege engine.</li><li>Buildings may only be raised in your <b>homeland</b>, or in a conquered city once you <b>annex</b> it.</li><li>A freshly conquered city pays half tribute for 5 turns while the unrest settles.</li><li>Walls toughen the garrison and slow a siege.</li></ul><b>The sea</b><ul><li><b>Port cities</b> build War Galleys from the Recruit tab. The galley appears on the water beside the city.</li><li>Fleets sail 4 sea cells a turn, 6 once you have Admiralty. An enemy fleet blocks the way &mdash; you may strike it, but not sail past it.</li><li>Armies cross water by <b>boarding a fleet</b>: 3 troops per galley. Sail, then land them on a shore you choose. They cannot march the turn they come ashore.</li><li>An enemy fleet sitting on your harbour blockades it and stops you building ships there.</li></ul><b>Diplomacy</b><ul><li>You begin <b>at peace</b> with every crown. Their borders are sealed until you declare war from the <b>Diplomacy</b> panel.</li><li>Free lords &mdash; the grey cities &mdash; may be attacked at any time.</li><li>Enemy land is tinted red and hatched. Declaring war costs no gold, but every other crown thinks less of you.</li></ul><b>Research</b><ul><li>Two researches a turn. Each level adds 10% damage to its track.</li></ul>';
+const HELP_HTML='<b>The goal</b><ul><li>Hold <b>48 of the 80 cities</b> to win.</li></ul><b>Moving armies</b><ul><li>Tap an army, choose how many troops to send in the bar, press <b>Choose target</b>, then tap where to go.</li><li>Foot march 3 cells a turn, cavalry 5, siege engines 2.</li><li>Tap somewhere far and the army takes a <b>standing order</b> &mdash; it marches on its own each turn until it arrives.</li><li>The small <b>dots</b> scattered over the map are cell centres. That dot is the exact point an army must reach to take the cell.</li></ul><b>Fighting</b><ul><li>Attacking a defended city offers <b>Assault</b> (fight now) or <b>Lay siege</b> (starve it out).</li><li>An assault fights several exchanges. If neither side breaks, your army falls back wounded &mdash; press again or regroup.</li><li>Units have hit points and armour. Wounds heal every turn, fastest inside your own cities.</li></ul><b>Columns on the road</b><ul><li>An army that ends its turn part-way along a leg is a <b>column</b> &mdash; strung out on the march, not formed for battle.</li><li>Anything of yours standing beside <b>either end</b> of that leg may <b>strike</b> it. Those cells glow <b>red</b> when you choose a target.</li><li>A column fights at &minus;40% and never fights to the last man: it breaks off and falls back to the ground it left.</li><li>What it really loses is the march &mdash; the crossing it had made and its standing order. Roads are fast, but a fast army is an exposed one.</li></ul><b>Cities</b><ul><li>Tier 1 troops can be raised anywhere you rule. Tier 2 and 3 need <b>buildings</b>: Barracks, Archery Range, Stables, and a Siege Workshop for any siege engine.</li><li>Buildings may only be raised in your <b>homeland</b>, or in a conquered city once you <b>annex</b> it.</li><li>A freshly conquered city pays half tribute for 5 turns while the unrest settles.</li><li>Walls toughen the garrison and slow a siege.</li></ul><b>The sea</b><ul><li><b>Port cities</b> build War Galleys from the Recruit tab. The galley appears on the water beside the city.</li><li>Fleets sail 4 sea cells a turn, 6 once you have Admiralty. An enemy fleet blocks the way &mdash; you may strike it, but not sail past it.</li><li>Armies cross water by <b>boarding a fleet</b>: 3 troops per galley. Sail, then land them on a shore you choose. They cannot march the turn they come ashore.</li><li>An enemy fleet sitting on your harbour blockades it and stops you building ships there.</li></ul><b>Diplomacy</b><ul><li>You begin <b>at peace</b> with every crown. Their borders are sealed until you declare war from the <b>Diplomacy</b> panel.</li><li>Free lords &mdash; the grey cities &mdash; may be attacked at any time.</li><li>Enemy land is tinted red and hatched. Declaring war costs no gold, but every other crown thinks less of you.</li></ul><b>Research</b><ul><li>Two researches a turn. Each level adds 10% damage to its track.</li></ul>';
 function showHelp(){showModal('How to play',HELP_HTML,[['Close',closeModal,'primary']]);}
 // garrison strength band for cities you do not own (no exact numbers — Nabeel's fog rule)
 function garrisonBand(n){
@@ -2276,6 +2434,7 @@ function updateMap(){
     const co=cellOwnerOf(cid);
     el.setAttribute('fill',tint(co));
     el.classList.toggle('target',!!targets[cid]);
+    el.classList.toggle('icept',!!(targets[cid]&&targets[cid].icept));
     el.classList.toggle('occupied',occupiedCell(cid));
     el.classList.toggle('atwar',co!=='neutral'&&co!==G.player&&atWar(G.player,co));
   });
@@ -2589,6 +2748,18 @@ function cellClick(cid){
        ['Keep the peace',()=>{closeModal();G.targeting=false;G.marchInfo=null;renderAll();},'']]);
     return;
   }
+  if(tg.icept){
+    if(!onTheMarch(def)){toast('That column has already halted.');G.targeting=false;G.marchInfo=null;renderAll();return;}
+    const force={};for(const t in want)if(want[t])force[t]=want[t];
+    const p=oddsOfIntercept(force,cid,G.player);
+    showModal('Strike the column?',
+      battleCard(force,G.player,def.u,def.e)+
+      '<div class="meta" style="text-align:center;margin-top:4px">'+empName(def.e)+"'s troops are strung out on the march. They fight at <b>&minus;40%</b> and cannot form a line &mdash; but they will break off and fall back rather than stand and die, so you will not destroy them outright.</div>"+
+      '<div class="meta" style="text-align:center">The strike costs you the rest of this turn’s movement. It costs them the crossing they had made and the march order behind it.</div>'+
+      '<div style="text-align:center;margin-top:4px">Estimated odds: <b>'+Math.round(p*100)+'%</b> &mdash; '+oddsLabel(p)+'</div>',
+      [['Strike!',()=>{closeModal();doIntercept(from,cid,want);},'primary'],['Cancel',closeModal,'']]);
+    return;
+  }
   if(def&&def.e!==G.player){
     const force={};for(const t in want)if(want[t])force[t]=want[t];
     const isFm=forced&&!tg.sea&&tg.d>forceRange(army,force);
@@ -2609,14 +2780,49 @@ function cellClick(cid){
     doMarch(from,cid,want,forced);
   }
 }
+function doIntercept(from,cid,want){
+  const army=G.armies[from];
+  if(!army){G.targeting=false;G.marchInfo=null;renderAll();return;}
+  delete army.ord;delete army.siege;
+  const force=takeForce5(from,want);
+  const dmap=G._takenD;
+  if(!cnt(force)){G.targeting=false;G.marchInfo=null;renderAll();return;}
+  const rep=intercept5(from,cid,force,G.player,{dmap});
+  G.targeting=false;G.marchInfo=null;G.send={};
+  G.selArmy=(G.armies[from]&&G.armies[from].e===G.player)?from:null;
+  playAnims(()=>{
+    renderAll();
+    logIntercept(rep);
+    showModal('Column struck',
+      (rep.defLost?'You cut down <b>'+rep.defLost+'</b> of them':'You drew blood but felled none')+
+      '; you lost <b>'+rep.attLost+'</b>.<br><br>'+
+      (rep.broke
+        ?'<span class="good">Their column broke.</span> The survivors fell back to the ground they had left.'
+        :'<span style="color:var(--gold)">They fought clear.</span>')+
+      ' Either way the crossing is undone and their march order is cancelled &mdash; they must be sent again.',
+      [['Continue',closeModal,'primary']]);
+    if(G.selArmy)openArmyPanel(G.selArmy);
+    saveGame();
+  });
+}
 function doMarch(from,cid,want,forced){
   if(G.armies[from]){delete G.armies[from].ord;delete G.armies[from].siege;}
   const r=executeMarch(from,cid,want,forced,G.player);
   G.targeting=false;G.marchInfo=null;
-  G.selArmy=(r&&r.type==='battle'&&!r.rep.win)?(G.armies[from]?from:null):(G.armies[cid]&&G.armies[cid].e===G.player?cid:null);
+  G.selArmy=(r&&(r.type==='intercept'||(r.type==='battle'&&!r.rep.win)))
+    ?(G.armies[from]?from:null)
+    :(G.armies[cid]&&G.armies[cid].e===G.player?cid:null);
   G.send={};
   playAnims(()=>{
     renderAll();
+    if(r&&r.type==='intercept'){
+      logIntercept(r.rep);
+      showModal('Column struck',
+        'You cut down <b>'+r.rep.defLost+'</b>; you lost <b>'+r.rep.attLost+'</b>.<br><br>'+
+        (r.rep.broke?'<span class="good">Their column broke and fell back.</span>':'<span style="color:var(--gold)">They fought clear.</span>')+
+        ' Their crossing is undone and their march order is cancelled.',
+        [['Continue',closeModal,'primary']]);
+    }
     if(r&&r.type==='battle'){
       logBattle5(r.rep);
       let b='';
@@ -2842,12 +3048,22 @@ function computeMarch(){
   const a=G.armies[G.selArmy];
   const want={};
   UKEYS.forEach(t=>{want[t]=Math.max(0,Math.min((G.send&&G.send[t])||0,a.u[t]||0));});
-  G.marchInfo=cnt(want)?marchTargets5(G.selArmy,want,!!G.forced):null;
+  if(!cnt(want)){G.marchInfo=null;return;}
+  const info=marchTargets5(G.selArmy,want,!!G.forced);
+  // a column crossing a leg beside you can be struck even where you could not march, and a column
+  // you *could* march onto is struck rather than fought — so interception always wins the cell
+  const ic=interceptTargets(G.selArmy,G.player);
+  for(const cid in ic)info.targets[cid]=ic[cid];
+  G.marchInfo=info;
 }
 function startTargeting(){
   G.targeting=true;
   computeMarch();
-  if(G.marchInfo&&Object.keys(G.marchInfo.targets).length===0)
+  const cols=G.marchInfo?Object.keys(G.marchInfo.targets).filter(c=>G.marchInfo.targets[c].icept).length:0;
+  if(cols)
+    toast(cols===1?'An enemy column is on the march beside you &mdash; the <b>red</b> cell can be struck.'
+                  :cols+' enemy columns are on the march beside you &mdash; the <b>red</b> cells can be struck.');
+  else if(G.marchInfo&&Object.keys(G.marchInfo.targets).length===0)
     toast('No reachable targets this turn &mdash; click a distant cell to set a multi-turn march order.');
   updateMap();
   if(G.selArmy)openArmyPanel(G.selArmy);
