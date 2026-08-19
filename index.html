@@ -76,7 +76,9 @@ h1,h2,h3{font-weight:normal}
 #log{flex:1;overflow-y:auto;padding:0 12px 12px;font-size:13px;color:var(--muted);line-height:1.5}
 #log .l{border-bottom:1px solid #3a3025;padding:4px 0}
 #log .turnmark{color:var(--gold)}
-.dtabs{display:flex;border-bottom:1px solid var(--border);margin:0 -12px 8px}
+/* v5.6e: the tabs live inside the scrolling panel, so scrolling a long recruit list carried them
+   off the top of the drawer and you could not get back to Buildings without scrolling up. Pin them. */
+.dtabs{display:flex;border-bottom:1px solid var(--border);margin:0 -12px 8px;position:sticky;top:-4px;background:#181310;z-index:3}
 .dtabs button{flex:1;border:none;border-radius:0;background:transparent;padding:7px;color:var(--muted);font-size:13px}
 .dtabs button.on{color:var(--gold);border-bottom:2px solid var(--gold)}
 .dcRow{display:flex;align-items:center;gap:8px;margin-top:7px;font-size:12.5px;color:var(--muted)}
@@ -97,7 +99,12 @@ h1,h2,h3{font-weight:normal}
 .steprow input{width:52px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:4px;padding:2px 4px;font-family:inherit}
 /* map styling */
 .cell{stroke:#9a8c72;stroke-width:0.7;stroke-opacity:0.5;cursor:pointer;vector-effect:non-scaling-stroke}
-.seacell{fill:var(--sea);stroke:#93a598;stroke-width:0.6;stroke-opacity:0.55;cursor:pointer;vector-effect:non-scaling-stroke}
+.seacell{fill:var(--sea);stroke:#6f8578;stroke-width:0.8;stroke-opacity:0.85;cursor:pointer;vector-effect:non-scaling-stroke}
+/* v5.6e: 793 stroked sea cells re-rasterise on every viewBox change, and non-scaling-stroke makes
+   each one recompute its stroke geometry. On a 1440-wide phone that is what made panning crawl.
+   Drop the sea linework for the duration of a drag — nobody reads the grid while the map is moving. */
+#map.dragging .seacell{stroke:none}
+#map.dragging{shape-rendering:optimizeSpeed}
 .seacell.stgt{fill:#bcd0c2;stroke:var(--gold);stroke-width:1.6;stroke-opacity:1}
 .seacell.ssel{stroke:#fffbe8;stroke-width:2;stroke-opacity:1}
 .road{stroke:#a98d63;stroke-width:1.6;stroke-linecap:round;opacity:0.7;vector-effect:non-scaling-stroke;pointer-events:none}
@@ -144,7 +151,11 @@ h1,h2,h3{font-weight:normal}
 #impWrap{max-width:480px;margin:18px auto 0}
 #impWrap textarea{width:100%;height:60px;background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px;font-size:11px;font-family:monospace}
 #impMsg{color:var(--danger);font-size:13px;margin-top:4px;min-height:16px}
+/* v5.6e: visibility is a class, not an inline style. renderBar used to write style.display='block'
+   straight onto the element, and an inline style beats the stylesheet — so the phone card's
+   display:flex never applied and none of its children could shrink or scroll. */
 #abar{display:none;position:absolute;left:50%;transform:translateX(-50%);bottom:10px;z-index:6;background:rgba(24,19,14,.96);border:1px solid var(--gold);border-radius:12px;padding:10px 12px;max-width:96%;width:640px;max-height:46%;overflow-y:auto}
+#abar.show{display:block}
 .dcHead{display:flex;align-items:center;gap:9px;margin-bottom:8px}
 .crest{width:22px;height:22px;border-radius:50%;border:2px solid #241d17;flex:none}
 .dcT{min-width:0;margin-right:auto}
@@ -162,6 +173,7 @@ h1,h2,h3{font-weight:normal}
 .dcTiles{display:flex;gap:7px;overflow-x:auto;flex:1;min-width:0}
 .tile{background:var(--panel2);border:1px solid var(--border);border-radius:8px;padding:5px 6px 6px;flex:none;width:74px;text-align:center;position:relative}
 .tile .tn{position:absolute;top:4px;right:6px;font-size:12px;font-weight:bold}
+.tnm{display:none}                                  /* unit name: phone card only, see the media query */
 .rbar{height:4px;background:#3a3025;border-radius:2px;margin:3px 1px}
 .rbar div{height:4px;background:#5aa858;border-radius:2px}
 .tstep{display:flex;align-items:center;justify-content:space-between;gap:2px}
@@ -179,13 +191,16 @@ h1,h2,h3{font-weight:normal}
 .tdesc{font-size:12px;color:var(--muted)}
 .tnext{font-size:12px;color:var(--text);margin-top:2px}
 .trow button{flex:none;min-width:62px}
-@media (max-width:760px){.dcSum{display:none}#abar{width:96%}}
+/* v5.6e: the phone layout is chosen by SHAPE, not width alone. A Fold 6 unfolded is 832x714 CSS,
+   which sailed past a width-only breakpoint and got the desktop layout squeezed into a short
+   window — that is what was clipping the UI. Anything short and not-wide is a phone. */
+@media (max-width:760px), (max-height:780px) and (max-width:1000px){.dcSum{display:none}#abar{width:96%}}
 .zone{cursor:pointer}
 .zc{fill:#54707c;stroke:#2c3b42;stroke-width:1.5;opacity:.92}
 .zone.zsel .zc{stroke:#fffbe8;stroke-width:3}
 .zone.ztgt .zc{stroke:var(--gold);stroke-width:3;stroke-dasharray:6 4}
 .zn{font-size:11px;fill:#41575f;text-anchor:middle;pointer-events:none;paint-order:stroke;stroke:#b6c2b6;stroke-width:2px}
-@media (max-width:760px){
+@media (max-width:760px), (max-height:780px) and (max-width:1000px){
   #rail{width:46px;padding:6px 3px}
   .rbtn .rlb{display:none}
   .rbtn .ric{font-size:20px}
@@ -194,10 +209,27 @@ h1,h2,h3{font-weight:normal}
   #drawer.open~#abar{display:none!important}
   #mapwrap.drawered #zoomctl{right:12px;bottom:calc(72% + 10px)}   /* bottom sheet on phones: lift the controls above it */
   #drawer{max-height:72%}                    /* a building list needs more than 62% of a phone screen */
-  #abar{max-height:62%;width:98%;bottom:6px;padding:8px}
-  .dcBody{flex-direction:column;gap:8px}                 /* stack: summary+tiles, then actions */
-  .dcTop{display:flex;gap:8px;align-items:stretch;min-width:0}
-  .dcTiles{-webkit-overflow-scrolling:touch}
+  /* ---- v5.6e: the division card, rebuilt for a thumb ----
+     The old card put every unit in a 74px tile on ONE horizontal strip. On a 344px Fold cover
+     screen that is 317px of tiles in 257px of space, so the units you needed were off the right
+     edge behind a sideways scroll nobody finds — which is why "cannot access unit movement" kept
+     coming back. Units are now full-width rows in a vertical list that scrolls, the steppers are
+     thumb-sized, and the actions are pinned to the bottom of the sheet where they never move. */
+  #abar{max-height:70%;width:98%;bottom:6px;padding:8px;overflow:hidden}
+  #abar.show{display:flex;flex-direction:column}
+  .dcHead,.dcAct,.dcRow{flex:none}
+  .dcBody{flex-direction:column;gap:8px;flex:1 1 auto;min-height:0}
+  .dcTop{display:flex;gap:8px;align-items:stretch;min-width:0;flex:1 1 auto;min-height:0}
+  .dcTiles{flex-direction:column;gap:6px;overflow-x:hidden;overflow-y:auto;flex:1 1 auto;min-height:0;-webkit-overflow-scrolling:touch}
+  .tile{width:auto;display:flex;align-items:center;gap:8px;flex-wrap:wrap;text-align:left;padding:6px 8px}
+  .tile>svg{flex:none;width:30px;height:30px}          /* 42px art pushed the stepper onto its own line */
+  .tnm{display:block;flex:1 1 auto;min-width:0;font-size:13px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .tstep button{padding:5px 11px}
+  .tile .tn{position:static;flex:none;font-size:13px;color:var(--muted);font-weight:normal}
+  .rbar{flex:1 1 100%;order:9;margin:3px 0 0}          /* health bar spans the row, under the controls */
+  .tstep{flex:none;gap:8px}
+  .tstep button{padding:5px 13px;font-size:16px;line-height:20px}
+  .tstep span{font-size:15px;min-width:18px;text-align:center}
   .dcAct{flex-direction:row;flex-wrap:wrap;justify-content:stretch}
   .dcAct>div{flex:1 1 100%}
   .dcAct button{flex:1 1 auto;padding:9px 8px;font-size:13px}
@@ -208,7 +240,10 @@ h1,h2,h3{font-weight:normal}
   .rbtn .ric{font-size:17px}
   #rail{width:58px}
   #logdrawer{width:86%}
+  /* End turn was being pushed off the right edge by the stats and could only be reached by
+     scrolling the header. Pin it: the stats scroll under it, the button never leaves. */
   #hdr{gap:6px;padding:5px 7px;flex-wrap:nowrap;overflow-x:auto}
+  #hdr .right{position:sticky;right:0;background:var(--panel);padding-left:6px;box-shadow:-8px 0 8px -6px rgba(0,0,0,.7)}
   #hdr .title{display:none}
   #hdr .stat{font-size:12px;white-space:nowrap}
   #hdr .empbadge{font-size:12px}
@@ -2010,7 +2045,7 @@ const FLAVOR={
 
 // ==== seg_zoom.js ====
 function applyVB(){$('map').setAttribute('viewBox',VB.x+' '+VB.y+' '+VB.w+' '+VB.h);}
-function fitView(){VB={x:0,y:0,w:MAPD5.W,h:MAPD5.H};applyVB();}
+function fitView(){VB={x:0,y:0,w:MAPD5.W,h:MAPD5.H};applyVB();fitAspect(true);}
 function zoomBy(f){
   const cx=VB.x+VB.w/2,cy=VB.y+VB.h/2;
   VB.w=Math.max(180,Math.min(MAPD5.W*1.3,VB.w*f));
@@ -2051,7 +2086,7 @@ function updateLogBadge(){
   b.style.display=(n&&!open)?'block':'none';
   b.textContent=n>9?'9+':n;
 }
-const HELP_HTML='<b>The goal</b><ul><li>Hold <b>48 of the 80 cities</b> to win.</li></ul><b>Moving armies</b><ul><li>Tap an army, choose how many troops to send in the bar, press <b>Choose target</b>, then tap where to go.</li><li>Foot march 3 cells a turn, cavalry 5, siege engines 2.</li><li>Tap somewhere far and the army takes a <b>standing order</b> &mdash; it marches on its own each turn until it arrives.</li><li>The small <b>dots</b> scattered over the map are cell centres. That dot is the exact point an army must reach to take the cell.</li></ul><b>Fighting</b><ul><li>Attacking a defended city offers <b>Assault</b> (fight now) or <b>Lay siege</b> (starve it out).</li><li>An assault fights several exchanges. If neither side breaks, your army falls back wounded &mdash; press again or regroup.</li><li>Units have hit points and armour. Wounds heal every turn, fastest inside your own cities.</li></ul><b>Columns on the road</b><ul><li>An army that ends its turn part-way along a leg is a <b>column</b> &mdash; strung out on the march, not formed for battle.</li><li>Anything of yours standing beside <b>either end</b> of that leg may <b>strike</b> it. Those cells glow <b>red</b> when you choose a target.</li><li>A column fights at &minus;40% and never fights to the last man: it breaks off and falls back to the ground it left.</li><li>What it really loses is the march &mdash; the crossing it had made and its standing order. Roads are fast, but a fast army is an exposed one.</li></ul><b>Cities</b><ul><li>Tier 1 troops can be raised anywhere you rule. Tier 2 and 3 need <b>buildings</b>: Barracks, Archery Range, Stables, and a Siege Workshop for any siege engine.</li><li>Buildings may only be raised in your <b>homeland</b>, or in a conquered city once you <b>annex</b> it.</li><li>A freshly conquered city pays half tribute for 5 turns while the unrest settles.</li><li>Walls toughen the garrison and slow a siege.</li></ul><b>The sea</b><ul><li><b>Port cities</b> build War Galleys from the Recruit tab. The galley appears on the water beside the city.</li><li>Fleets sail 4 sea cells a turn, 6 once you have Admiralty. An enemy fleet blocks the way &mdash; you may strike it, but not sail past it.</li><li>Armies cross water by <b>boarding a fleet</b>: 3 troops per galley. Sail, then land them on a shore you choose. They cannot march the turn they come ashore.</li><li>An enemy fleet sitting on your harbour blockades it and stops you building ships there.</li></ul><b>Diplomacy</b><ul><li>You begin <b>at peace</b> with every crown. Their borders are sealed until you declare war from the <b>Diplomacy</b> panel.</li><li>Free lords &mdash; the grey cities &mdash; may be attacked at any time.</li><li>Enemy land is tinted red and hatched. Declaring war costs no gold, but every other crown thinks less of you.</li></ul><b>Research</b><ul><li>Two researches a turn. Each level adds 10% damage to its track.</li></ul>';
+const HELP_HTML='<b>The goal</b><ul><li>Hold <b>48 of the 80 cities</b> to win.</li></ul><b>Moving armies</b><ul><li>Tap an army, choose how many troops to send in the bar, press <b>Choose target</b>, then tap where to go.</li><li>Foot march 3 cells a turn, cavalry 5, siege engines 2.</li><li>Tap somewhere far and the army takes a <b>standing order</b> &mdash; it marches on its own each turn until it arrives.</li><li>The small <b>dots</b> scattered over the map are cell centres. That dot is the exact point an army must reach to take the cell.</li></ul><b>Fighting</b><ul><li>Attacking a defended city offers <b>Assault</b> (fight now) or <b>Lay siege</b> (starve it out).</li><li>An assault fights several exchanges. If neither side breaks, your army falls back wounded &mdash; press again or regroup.</li><li>A <b>dashed ring</b> around a city means it is <b>under siege</b>. The ring is drawn in the besieging empire&rsquo;s colour, and tapping the city says who and for how long.</li><li>Units have hit points and armour. Wounds heal every turn, fastest inside your own cities.</li></ul><b>Columns on the road</b><ul><li>An army that ends its turn part-way along a leg is a <b>column</b> &mdash; strung out on the march, not formed for battle.</li><li>Anything of yours standing beside <b>either end</b> of that leg may <b>strike</b> it. Those cells glow <b>red</b> when you choose a target.</li><li>A column fights at &minus;40% and never fights to the last man: it breaks off and falls back to the ground it left.</li><li>What it really loses is the march &mdash; the crossing it had made and its standing order. Roads are fast, but a fast army is an exposed one.</li></ul><b>Cities</b><ul><li>Tier 1 troops can be raised anywhere you rule. Tier 2 and 3 need <b>buildings</b>: Barracks, Archery Range, Stables, and a Siege Workshop for any siege engine.</li><li>Buildings may only be raised in your <b>homeland</b>, or in a conquered city once you <b>annex</b> it.</li><li>A freshly conquered city pays half tribute for 5 turns while the unrest settles.</li><li>Walls toughen the garrison and slow a siege.</li></ul><b>The sea</b><ul><li><b>Port cities</b> build War Galleys from the Recruit tab. The galley appears on the water beside the city.</li><li>Fleets sail 4 sea cells a turn, 6 once you have Admiralty. An enemy fleet blocks the way &mdash; you may strike it, but not sail past it.</li><li>Armies cross water by <b>boarding a fleet</b>: 3 troops per galley. Sail, then land them on a shore you choose. They cannot march the turn they come ashore.</li><li>An enemy fleet sitting on your harbour blockades it and stops you building ships there.</li></ul><b>Diplomacy</b><ul><li>You begin <b>at peace</b> with every crown. Their borders are sealed until you declare war from the <b>Diplomacy</b> panel.</li><li>Free lords &mdash; the grey cities &mdash; may be attacked at any time.</li><li>Enemy land is tinted red and hatched. Declaring war costs no gold, but every other crown thinks less of you.</li></ul><b>Research</b><ul><li>Two researches a turn. Each level adds 10% damage to its track.</li></ul>';
 function showHelp(){showModal('How to play',HELP_HTML,[['Close',closeModal,'primary']]);}
 // garrison strength band for cities you do not own (no exact numbers — Nabeel's fog rule)
 function garrisonBand(n){
@@ -2347,7 +2382,7 @@ function loadGame(){
   const cap=provOf(EMPIRES[G.player].cap);
   VB.w=MAPD5.W/3;VB.h=MAPD5.H/3;
   VB.x=cap.cx-VB.w/2;VB.y=cap.cy-VB.h/2;
-  applyVB();
+  applyVB();fitAspect();
   return true;
 }
 function exportSave(){
@@ -2421,6 +2456,21 @@ function applyVB(){
   $('map').setAttribute('viewBox',VB.x+' '+VB.y+' '+VB.w+' '+VB.h);
   if(G&&VB.w!==lastW){lastW=VB.w;updateMap();}
 }
+// v5.6e: the map is drawn with preserveAspectRatio="meet", so a viewBox that is not the same SHAPE
+// as the screen gets letterboxed. The start view was a landscape-ish box (583x362); on a portrait
+// phone that is scaled down to fit the width, leaving two thick bands of empty sea above and below.
+// It reads as the game zooming out on its own. Match the viewBox shape to the viewport and the map
+// fills the screen at every size. `grow` is for fit-world, where nothing may be cropped.
+function fitAspect(grow){
+  const r=$('map').getBoundingClientRect();
+  if(!r.width||!r.height)return;
+  const want=r.width/r.height;
+  const cx=VB.x+VB.w/2, cy=VB.y+VB.h/2;
+  const wide=VB.w/VB.h>want;
+  if(grow?!wide:wide) VB.w=Math.max(180,VB.h*want); else VB.h=Math.max(112,VB.w/want);
+  VB.x=cx-VB.w/2; VB.y=cy-VB.h/2;
+  applyVB();
+}
 function updateMap(){
   const svg=$('map');
   const cw=svg.clientWidth||svg.getBoundingClientRect().width||1000;
@@ -2440,7 +2490,17 @@ function updateMap(){
   });
   // v5.4d: enemy realms carry a red hatch and a red border, so war reads at a glance on every
   // empire colour rather than depending on a tint that vanished against red or pink empires.
-  const atWarProv=pid=>{const ow=ownerOf(pid);return !!(ow&&ow!=='neutral'&&ow!==G.player&&atWar(G.player,ow));};
+  // v5.6e: the war overlay used to be painted per PROVINCE, from the static province outline,
+  // keyed on who owned the CITY. But land changes hands per CELL, so the moment a province was
+  // half-taken the hatch still covered its whole original extent — red stripes lying across
+  // steppe and desert that belonged to nobody, or to you. Hatch the cells that are actually
+  // theirs, which is the same test the land tint already uses, so the two can never disagree.
+  const hostileCell=cid=>{const co=cellOwnerOf(cid);return co!=='neutral'&&co!==G.player&&atWar(G.player,co);};
+  const atWarProv=pid=>{
+    const ow=ownerOf(pid);
+    if(!(ow&&ow!=='neutral'&&ow!==G.player&&atWar(G.player,ow)))return false;
+    return provOf(pid).cells.every(c=>cellOwnerOf(c)===ow);   // only ring a province you hold entire
+  };
   svg.querySelectorAll('#gOut path').forEach(el=>{
     const pid=el.getAttribute('data-p');
     el.classList.toggle('warline',!!pid&&atWarProv(pid));
@@ -2448,10 +2508,8 @@ function updateMap(){
   const gWarL=svg.querySelector('#gWar');
   if(gWarL){
     let wh='';
-    for(const pid in MAPD5.provs){
-      if(!atWarProv(pid))continue;
-      const o=provOf(pid).outline;
-      if(o)wh+='<path d="'+o+'" fill="url(#warHatch)" opacity="0.34"/>';
+    for(const cid in MAPD5.cells){
+      if(hostileCell(cid))wh+='<path d="'+MAPD5.cells[cid].d+'" fill="url(#warHatch)" opacity="0.34"/>';
     }
     gWarL.innerHTML=wh;
   }
@@ -2528,13 +2586,20 @@ function updateMap(){
     if(a.w)ah+='<text x="'+(c.x-20*s)+'" y="'+(c.y+14*s)+'" font-size="'+(10*s)+'" font-weight="bold" fill="#c94040" style="paint-order:stroke;stroke:#241d17;stroke-width:'+(2*s)+'px">~</text>';
     ah+='</g>';
   }
-  // besieged-city rings
+  // Besieged-city rings. v5.6e: these were a generic red dashed hex with nothing anywhere to say
+  // what they meant, so a ring would appear beside a city halfway across the map and read as a
+  // glitch. Draw it in the BESIEGER's colour and name them in the tooltip, so the ring answers
+  // "who is strangling this city" on sight. openCityPanel spells it out for touch, where there
+  // is no hover.
   for(const cid in G.armies){
     const a=G.armies[cid];
     if(!a.siege)continue;
     const dc=cellOf(a.siege);
     if(!dc)continue;
-    ah+='<path d="'+hexPath(dc.x,dc.y,13*s)+'" fill="none" stroke="#c94040" stroke-width="'+(1.8*s)+'" stroke-dasharray="'+(4*s)+' '+(3*s)+'"/>';
+    const col=a.e===G.player?'#c94040':empColor(a.e);
+    const town=provOf(dc.p)?provOf(dc.p).city:'this city';
+    ah+='<path d="'+hexPath(dc.x,dc.y,13*s)+'" fill="none" stroke="'+col+'" stroke-width="'+(1.8*s)+'" stroke-dasharray="'+(4*s)+' '+(3*s)+'">'+
+        '<title>'+empName(a.e)+' is besieging '+town+'</title></path>';
   }
   svg.querySelector('#gArmy').innerHTML=ah;
   // draw march-order routes (dashed) for the player's armies
@@ -2884,6 +2949,13 @@ function openCityPanel(pid){
       if(mine)h+='<div class="meta">Garrison: '+cnt(gar.u)+' troops</div>';
       else{const b=garrisonBand(cnt(gar.u));h+='<div class="meta">Garrison: <span style="color:'+b.cls+'">'+b.txt+'</span> ('+empName(gar.e)+') &mdash; scouts report strength, not numbers.</div>';}
     }else h+='<div class="meta">Garrison: <span style="color:#7ec97e">undefended</span></div>';
+    // v5.6e: say it in words. The dashed ring on the map is the only other clue a city is besieged.
+    const besieger=Object.keys(G.armies).find(c=>G.armies[c].siege===pv.citycell);
+    if(besieger){
+      const bs=G.armies[besieger];
+      h+='<div class="meta" style="color:var(--danger)">&#9876; <b>Under siege</b> by '+empName(bs.e)+
+         ' &mdash; the garrison starves a little each turn until the siege is lifted or the walls are stormed.</div>';
+    }
     const blds=BKEYS.filter(b=>bldLv(pid,b)).map(b=>BLD[b].name+' L'+bldLv(pid,b));
     h+='<div class="meta">Buildings: '+(blds.length?blds.join(', '):'none')+'</div>';
     if(mine)h+='<div class="meta">'+(isHomeCity(pid,G.player)?'<span style="color:var(--gold)">Homeland city</span> &mdash; can build.'
@@ -2972,11 +3044,11 @@ function openCityPanel(pid){
 function renderBar(){
   const bar=$('abar');
   if(!bar)return;
-  if(!G||!G.selArmy||G.over){bar.style.display='none';return;}
+  if(!G||!G.selArmy||G.over){bar.classList.remove('show');return;}
   const a=G.armies[G.selArmy];
-  if(!a||a.e!==G.player){bar.style.display='none';return;}
+  if(!a||a.e!==G.player){bar.classList.remove('show');return;}
   const tot=cnt(a.u);
-  if(!tot){bar.style.display='none';return;}
+  if(!tot){bar.classList.remove('show');return;}
   if(!G.send)G.send={};
   const col=empColor(G.player);
   const wsel={};UKEYS.forEach(t=>{
@@ -3002,7 +3074,7 @@ function renderBar(){
     if(!n)return;
     const pool=n*UNITS[t].hp;
     const hpPct=Math.max(6,Math.round(100*(pool-Math.min((a.d&&a.d[t])||0,pool))/pool));
-    h+='<div class="tile">'+artSvg(t,42,col)+'<span class="tn">x'+n+'</span>';
+    h+='<div class="tile">'+artSvg(t,42,col)+'<span class="tnm">'+UNITS[t].name+'</span><span class="tn">x'+n+'</span>';
     h+='<div class="rbar" title="'+hpPct+'% strength"><div style="width:'+hpPct+'%'+(hpPct<50?';background:#c94040':(hpPct<85?';background:#c9a227':''))+'"></div></div>';
     h+='<div class="tstep"><button onclick="bumpSend(\''+t+'\',-1)">&minus;</button><span>'+wsel[t]+'</span><button onclick="bumpSend(\''+t+'\',1)">+</button></div></div>';
   });
@@ -3021,7 +3093,7 @@ function renderBar(){
     h+='<div class="dcRow">&#8674; Marching to <b>'+provOf(cellOf(a.ord).p).city+'</b>'+(eta?' &middot; arrives in '+eta+' turn'+(eta>1?'s':''):'')+'<button onclick="cancelOrder(\''+G.selArmy+'\')">Cancel</button></div>';
   }
   bar.innerHTML=h;
-  bar.style.display='block';
+  bar.classList.add('show');
 }
 function bumpSend(t,d){
   const a=G.armies[G.selArmy];
@@ -3353,6 +3425,10 @@ function initInput(){
       const d=Math.hypot(a[0].x-a[1].x,a[0].y-a[1].y);
       if(pinchD>0&&Math.abs(d-pinchD)>2){zoomBy(pinchD/d);pinchD=d;}
       moved=99;
+      // keep the pan anchor under the fingers. Without this, lifting one finger left lastX/lastY
+      // stranded wherever the pinch began, and the very next move applied that whole stale delta
+      // as one pan — the map lurched, which reads as a random zoom-out.
+      lastX=a[0].x;lastY=a[0].y;
       return;
     }
     if(!dragging)return;
@@ -3370,6 +3446,13 @@ function initInput(){
   const up=e=>{
     ptrs.delete(e.pointerId);
     svg.classList.remove('dragging');
+    if(ptrs.size===1){
+      // second finger lifted mid-pinch: re-anchor the pan on the finger still down and forget the
+      // pinch distance, otherwise the next move jumps by the gap between the two fingers.
+      const r=[...ptrs.values()][0];
+      lastX=r.x;lastY=r.y;pinchD=0;moved=99;      // moved=99 so the lift is never read as a tap
+      return;
+    }
     if(ptrs.size===0){
       if(dragging&&moved<=6){
         const t=downT&&downT.closest?downT.closest('[data-a],[data-p],[data-f],[data-c],[data-s]'):null;
@@ -3509,7 +3592,7 @@ function buildStart(){
     const cap=provOf(EMPIRES[selEmpire].cap);
     VB.w=MAPD5.W/3;VB.h=MAPD5.H/3;
     VB.x=cap.cx-VB.w/2;VB.y=cap.cy-VB.h/2;
-    applyVB();
+    applyVB();fitAspect();
   };
 }
 function refreshStart(){
@@ -3536,6 +3619,14 @@ $('helpBtn').addEventListener('click',showHelp);
 $('impBtn').addEventListener('click',importSave);
 buildStart();
 initGlobalKeys();
+// Folding a Fold 6 open, or rotating a phone, changes the viewport shape. Re-match the viewBox to
+// it, otherwise the map letterboxes again and the layout looks like it zoomed out on its own.
+let _rsz=null;
+addEventListener('resize',()=>{
+  if(!G||G.over)return;
+  clearTimeout(_rsz);
+  _rsz=setTimeout(()=>{fitAspect();updateMap();},180);
+});
 try{
   const sv=JSON.parse(localStorage.getItem('aoc5save'));
   if(sv&&(sv.cellOwner||sv.provOwner)&&!sv.over){
