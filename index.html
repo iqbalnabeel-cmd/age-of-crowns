@@ -11,7 +11,17 @@
   --sea:#a9b7ab; --parch:#e4d7b8; --ink:#4a3b28;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{background:var(--bg);color:var(--text);font-family:Georgia,'Times New Roman',serif;height:100vh;overflow:hidden}
+/* ===== v5.6f: the bug behind four rounds of "still broken on mobile" =====
+   Chrome on Android resolves 100vh against the LARGE viewport, the one you get with the URL bar
+   hidden. With the URL bar showing, a 100vh app is roughly 120px TALLER than what is actually on
+   screen, and body{overflow:hidden} means you can never scroll down to that strip. Everything
+   anchored to the bottom - the division card's Choose target / All / None / Forced march row, and
+   the Buy buttons at the foot of the city drawer - sat inside it. That is why the panels read as
+   "non-scrollable" and the action buttons read as "missing": they were rendered below the fold,
+   in a region the browser will not let you reach.
+   Fixed three ways, most-preferred last: 100vh for ancient browsers, 100dvh for modern ones, and
+   --apph written from visualViewport.height, which is exact and also handles the keyboard. */
+body{background:var(--bg);color:var(--text);font-family:Georgia,'Times New Roman',serif;height:100vh;height:100dvh;height:var(--apph,100dvh);overflow:hidden}
 button{font-family:inherit;cursor:pointer;background:var(--panel2);color:var(--text);border:1px solid var(--border);border-radius:6px;padding:6px 12px}
 button:hover:not(:disabled){border-color:var(--gold);color:var(--gold)}
 button:disabled{opacity:.4;cursor:not-allowed}
@@ -35,7 +45,7 @@ h1,h2,h3{font-weight:normal}
 .rival.off{opacity:.3;pointer-events:none}
 #startBtn{margin-top:24px;font-size:18px;padding:10px 40px}
 #startMsg{color:var(--muted);margin-top:10px;font-size:14px}
-#game{display:none;height:100vh;flex-direction:column}
+#game{display:none;height:100vh;height:100dvh;height:var(--apph,100dvh);flex-direction:column}
 #hdr{display:flex;align-items:center;gap:16px;padding:8px 16px;background:var(--panel);border-bottom:1px solid var(--border);flex-wrap:wrap}
 #hdr .title{color:var(--gold);font-size:20px;letter-spacing:2px}
 #hdr .stat{font-size:14px;color:var(--muted)}
@@ -215,7 +225,9 @@ h1,h2,h3{font-weight:normal}
      edge behind a sideways scroll nobody finds — which is why "cannot access unit movement" kept
      coming back. Units are now full-width rows in a vertical list that scrolls, the steppers are
      thumb-sized, and the actions are pinned to the bottom of the sheet where they never move. */
-  #abar{max-height:70%;width:98%;bottom:6px;padding:8px;overflow:hidden}
+  /* clear of the gesture bar as well as the fold */
+  #abar{max-height:70%;width:98%;bottom:calc(6px + env(safe-area-inset-bottom,0px));padding:8px;overflow:hidden}
+  #drawer{padding-bottom:env(safe-area-inset-bottom,0px)}
   #abar.show{display:flex;flex-direction:column}
   .dcHead,.dcAct,.dcRow{flex:none}
   .dcBody{flex-direction:column;gap:8px;flex:1 1 auto;min-height:0}
@@ -3617,12 +3629,27 @@ $('expBtn').addEventListener('click',exportSave);
 $('logBtn').addEventListener('click',()=>toggleLog());
 $('helpBtn').addEventListener('click',showHelp);
 $('impBtn').addEventListener('click',importSave);
+// v5.6f: pin the app to the height actually on screen. visualViewport.height is the only number
+// that is right while the URL bar slides in and out, so write it into --apph and let the CSS use
+// it. Runs before the game boots and on every viewport change.
+function syncAppHeight(){
+  const vv=window.visualViewport;
+  const h=Math.round((vv&&vv.height)||window.innerHeight||0);
+  if(h>0)document.documentElement.style.setProperty('--apph',h+'px');
+}
+syncAppHeight();
+if(window.visualViewport){
+  visualViewport.addEventListener('resize',syncAppHeight);
+  visualViewport.addEventListener('scroll',syncAppHeight);   // URL bar sliding counts as a scroll
+}
+addEventListener('orientationchange',()=>setTimeout(syncAppHeight,120));
 buildStart();
 initGlobalKeys();
 // Folding a Fold 6 open, or rotating a phone, changes the viewport shape. Re-match the viewBox to
 // it, otherwise the map letterboxes again and the layout looks like it zoomed out on its own.
 let _rsz=null;
 addEventListener('resize',()=>{
+  syncAppHeight();
   if(!G||G.over)return;
   clearTimeout(_rsz);
   _rsz=setTimeout(()=>{fitAspect();updateMap();},180);
