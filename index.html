@@ -376,8 +376,21 @@ const UNITS={
  knight:{name:'Knights',track:'cavalry',tier:3,cost:36,dmg:8,hp:16,armor:3},
  ballista:{name:'Ballistae',track:'catapult',tier:1,cost:24,dmg:6,hp:5,armor:0},
  catapult:{name:'Catapults',track:'catapult',tier:2,cost:36,dmg:8,hp:6,armor:1},
- trebuchet:{name:'Trebuchets',track:'catapult',tier:3,cost:55,dmg:12,hp:8,armor:1}
+ trebuchet:{name:'Trebuchets',track:'catapult',tier:3,cost:55,dmg:12,hp:8,armor:1},
+ // ---- V5.12: the four units approved 19 Jul 2026 and never built ----
+ // They sit at tier 3 inside EXISTING tracks rather than forming new ones, so the counter web is
+ // untouched: every track still beats exactly two and is beaten by exactly two. Each is a
+ // side-grade to the tier-3 unit already there, not a straight upgrade, so the choice is real.
+ axeman:{name:'Axemen',track:'sword',tier:3,cost:22,dmg:5,hp:14,armor:2,ap:1},
+ camel:{name:'Camel Riders',track:'cavalry',tier:3,cost:30,dmg:6,hp:14,armor:2,beatsAlso:['cavalry']},
+ elephant:{name:'War Elephants',track:'cavalry',tier:3,cost:48,dmg:11,hp:26,armor:3},
+ bombard:{name:'Bombard Cannon',track:'catapult',tier:3,cost:60,dmg:14,hp:7,armor:1,ap:1}
 };
+// Armour-piercing, the other half of the V5.12 design: "Axemen and Crossbowmen ignore armour."
+// Given to the crossbow track from tier 2 up. Hand Crossbows stay ordinary so the early game is
+// unchanged, and so the answer to heavy armour is something you have to build toward.
+UNITS.crossbow.ap=1;
+UNITS.arbalest.ap=1;
 for(const k in UNITS){                     // derive counters + ranged from the track
   const tr=TRACKS[UNITS[k].track];
   UNITS[k].beats=tr.beats;                 // track vs track (any tier counters any tier)
@@ -386,7 +399,14 @@ for(const k in UNITS){                     // derive counters + ranged from the 
 }
 const UKEYS=Object.keys(UNITS);
 function trackOf(t){return UNITS[t]?UNITS[t].track:t;}
-function beatsUnit(a,b){return TRACKS[trackOf(a)].beats.includes(trackOf(b));}
+// The counter web is track vs track. `beatsAlso` lets a single unit add one of its own without
+// disturbing that web — Camel Riders spook horses, so they beat the cavalry track their own track
+// belongs to, which no tier upgrade could express.
+function beatsUnit(a,b){
+  const ua=UNITS[a];
+  if(ua&&ua.beatsAlso&&ua.beatsAlso.includes(trackOf(b)))return true;
+  return TRACKS[trackOf(a)].beats.includes(trackOf(b));
+}
 function tierUnlocked(owner,t){            // legacy helper (AI/codex fallback); real gating is per-city buildings — see canRecruit
   const u=UNITS[t];
   if(u.tier<=1)return true;
@@ -522,16 +542,19 @@ function poolOf(army){
 }
 // applyDamage: spread raw damage across the stack; flat armor reduces each unit's share
 // (minimum 30% chips through so armor never makes a unit invincible). Wounds persist in army.d.
-function applyDamage(army,raw){
+function applyDamage(army,raw,ap){
   const kills={};
   const tot=cnt(army.u);
   if(!tot||raw<=0)return kills;
+  const apf=Math.max(0,Math.min(1,ap||0));   // fraction of `raw` that ignores armour entirely
   army.d=army.d||{};
   for(const t of Object.keys(army.u)){
     const n=army.u[t];if(!n)continue;
     const share=raw*(n/tot);
     const perUnit=share/n;
-    const eff=Math.max(perUnit*0.3,perUnit-UNITS[t].armor);
+    // the piercing part lands whole; the rest still meets armour, floor and all
+    const pierced=perUnit*apf, blunt=perUnit*(1-apf);
+    const eff=pierced+Math.max(blunt*0.3,blunt-UNITS[t].armor);
     let dmg=eff*n+(army.d[t]||0);
     let dead=Math.min(Math.floor(dmg/UNITS[t].hp),n);
     army.u[t]-=dead;
@@ -542,6 +565,34 @@ function applyDamage(army,raw){
   return kills;
 }
 const sumKills=k=>{let s=0;for(const t in k)s+=k[t];return s;};
+// ---- V5.12 armour-piercing ----
+// applyDamage takes one scalar, so it cannot know who dealt the blow. These carry that forward:
+// apShareOf reports what FRACTION of a force's output comes from armour-piercing units, and mixDmg
+// merges several damage sources (melee plus a fraction of ranged) while keeping that fraction right.
+function apShareOf(force,enemy,owner,mode){
+  const te=Math.max(1,cnt(enemy));let tot=0,ap=0;
+  for(const t in force){
+    if(!force[t])continue;
+    const ranged=UNITS[t].ranged;
+    if(mode==='ranged'&&!ranged)continue;
+    if(mode==='melee'&&ranged)continue;
+    let m=1;
+    for(const u in enemy){
+      if(!enemy[u])continue;
+      const sh=enemy[u]/te;
+      if(beatsUnit(t,u))m+=0.5*sh;
+      if(beatsUnit(u,t))m-=0.25*sh;
+    }
+    const d=Math.max(0,force[t]*UNITS[t].dmg*m*techMult(owner,t));
+    tot+=d; if(UNITS[t].ap)ap+=d;
+  }
+  return tot>0?ap/tot:0;
+}
+function mixDmg(parts){                    // parts: [[damage, apShare], ...]
+  let d=0,a=0;
+  parts.forEach(p=>{d+=p[0];a+=p[0]*p[1];});
+  return {d,ap:d>0?a/d:0};
+}
 // strength: heuristic proxy for AI decisions and odds (damage-weighted, counter-aware)
 function strength(a,e,isDef,isCap,owner){
   const s=dmgOutput(a,e,owner,'all');
@@ -1244,18 +1295,20 @@ function battle5(fromCell,toCell,force,attackerKey,opts){
   // Volley phase: ranged units on both sides strike first (35% of their damage, before losses).
   const av=dmgOutput(att.u,def.u,attackerKey,'ranged')*0.35*aMult;
   const dv=dmgOutput(def.u,att.u,def.e,'ranged')*0.35*dMult;
-  rep.attVolley=sumKills(applyDamage(def,av));
-  rep.defVolley=sumKills(applyDamage(att,dv));
+  rep.attVolley=sumKills(applyDamage(def,av,apShareOf(att.u,def.u,attackerKey,'ranged')));
+  rep.defVolley=sumKills(applyDamage(att,dv,apShareOf(def.u,att.u,def.e,'ranged')));
   // Then the lines close, and keep closing. One click used to buy exactly one exchange, so a
   // 35-strong army could bounce off a 9-man garrison simply because one round of damage could not
   // chew through their hit points. A battle now runs up to BATTLE_ROUNDS exchanges and stops the
   // moment either side breaks, so a lopsided fight is settled in a single assault while an even
   // one still ends in both lines holding.
   for(let round=0;round<BATTLE_ROUNDS&&cnt(att.u)&&cnt(def.u);round++){
-    const am=(dmgOutput(att.u,def.u,attackerKey,'melee')+dmgOutput(att.u,def.u,attackerKey,'ranged')*0.65)*aMult;
-    const dm=(dmgOutput(def.u,att.u,def.e,'melee')+dmgOutput(def.u,att.u,def.e,'ranged')*0.65)*dMult;
-    applyDamage(def,am);          // simultaneous
-    applyDamage(att,dm);
+    const aMix=mixDmg([[dmgOutput(att.u,def.u,attackerKey,'melee'),apShareOf(att.u,def.u,attackerKey,'melee')],
+                       [dmgOutput(att.u,def.u,attackerKey,'ranged')*0.65,apShareOf(att.u,def.u,attackerKey,'ranged')]]);
+    const dMix=mixDmg([[dmgOutput(def.u,att.u,def.e,'melee'),apShareOf(def.u,att.u,def.e,'melee')],
+                       [dmgOutput(def.u,att.u,def.e,'ranged')*0.65,apShareOf(def.u,att.u,def.e,'ranged')]]);
+    applyDamage(def,aMix.d*aMult,aMix.ap);          // simultaneous
+    applyDamage(att,dMix.d*dMult,dMix.ap);
     rep.rounds=round+1;
     // A commander does not fight to the last man against a wall. If the assault has cost more than
     // BREAK_OFF of the force and the garrison still stands, the attack draws off wounded instead of
@@ -1287,8 +1340,8 @@ const INTERCEPT_FLOOR=0.4;      // it breaks off and falls back at 40% rather th
 // Damage a column, but never past the floor. Anything the floor would have killed is handed back as
 // a survivor carrying most of a wound: the rear ranks broke away before the enemy reached them.
 // Without this a single strike could wipe a column outright, which is the one thing it must not do.
-function damageColumn(col,raw,floor){
-  const kills=applyDamage(col,raw);
+function damageColumn(col,raw,floor,ap){
+  const kills=applyDamage(col,raw,ap);
   let short=floor-cnt(col.u);
   if(short>0){
     const types=Object.keys(kills).sort((a,b)=>kills[b]-kills[a]);
@@ -1316,12 +1369,15 @@ function intercept5(fromCell,colCell,force,attackerKey,opts){
   const aMult=rand(0.9,1.1);
   const dMult=rand(0.9,1.1)*INTERCEPT_STRUNG*(1-0.2*(col.w?1:0));
   // the ambusher looses first into a column that cannot answer in order
-  rep.attVolley=damageColumn(col,dmgOutput(att.u,col.u,attackerKey,'ranged')*0.35*aMult,floor);
+  rep.attVolley=damageColumn(col,dmgOutput(att.u,col.u,attackerKey,'ranged')*0.35*aMult,floor,
+                             apShareOf(att.u,col.u,attackerKey,'ranged'));
   for(let r=0;r<INTERCEPT_ROUNDS&&cnt(att.u)&&cnt(col.u)>floor;r++){
-    const am=(dmgOutput(att.u,col.u,attackerKey,'melee')+dmgOutput(att.u,col.u,attackerKey,'ranged')*0.65)*aMult;
-    const dm=(dmgOutput(col.u,att.u,col.e,'melee')+dmgOutput(col.u,att.u,col.e,'ranged')*0.65)*dMult;
-    damageColumn(col,am,floor);
-    applyDamage(att,dm);
+    const aMix=mixDmg([[dmgOutput(att.u,col.u,attackerKey,'melee'),apShareOf(att.u,col.u,attackerKey,'melee')],
+                       [dmgOutput(att.u,col.u,attackerKey,'ranged')*0.65,apShareOf(att.u,col.u,attackerKey,'ranged')]]);
+    const dMix=mixDmg([[dmgOutput(col.u,att.u,col.e,'melee'),apShareOf(col.u,att.u,col.e,'melee')],
+                       [dmgOutput(col.u,att.u,col.e,'ranged')*0.65,apShareOf(col.u,att.u,col.e,'ranged')]]);
+    damageColumn(col,aMix.d*aMult,floor,aMix.ap);
+    applyDamage(att,dMix.d*dMult,dMix.ap);
     rep.rounds=r+1;
   }
   rep.attLost=attStart-cnt(att.u);
@@ -1877,7 +1933,14 @@ function aiTurn(k){
     const tk=trackOf(t);
     const options=UKEYS.filter(x=>UNITS[x].track===tk&&canRecruit(pid,x)&&UNITS[x].cost<=Math.min(budget,e.gold))
       .sort((a,b)=>UNITS[b].tier-UNITS[a].tier);
-    if(options.length)t=options[0];
+    // V5.12 put a second unit at tier 3 in three tracks. Taking options[0] always picked whichever
+    // came first in UKEYS, so the AI would have fielded Men-at-Arms, Knights and Trebuchets for
+    // ever and never a single Axeman, Camel Rider, Elephant or Bombard. Choose among the equals.
+    if(options.length){
+      const best=UNITS[options[0]].tier;
+      const top=options.filter(x=>UNITS[x].tier===best);
+      t=top[Math.floor(Math.random()*top.length)];
+    }
     else{                                  // this track is gated here — fall back to any tier-1 it can train
       const any=UKEYS.filter(x=>UNITS[x].tier===1&&canRecruit(pid,x)&&UNITS[x].cost<=Math.min(budget,e.gold));
       if(!any.length){budget-=5;continue;}
@@ -1962,6 +2025,12 @@ const ART={"spear": "<ellipse cx=\"16\" cy=\"29.6\" rx=\"8\" ry=\"1.8\" fill=\"#
 const TIERCOL={2:'#d9d9d9',3:'#ffd257'};
 // per-unit overlays drawn in the 32x32 figure box: tier 1 = light/no armour, tier 3 = helm plume, heavy kit, bigger weapon
 const TIERART={
+ // V5.12 units borrow their track's figure and are told apart by these overlays:
+ // a broad axe head, a camel's hump, tusks and a howdah, a cannon barrel and its smoke.
+ axeman:'<path d="M20.4 14.6 Q25.6 12.4 26.2 17.4 Q25.4 22.4 20.4 20.2 Z" fill="#c9c9c5" stroke="#241d17" stroke-width="0.8"/><path d="M19.6 10 L19.6 24" stroke="#7a5233" stroke-width="1.6"/>',
+ camel:'<path d="M9.6 16.6 Q12 10.8 14.4 16.6 Q16.8 10.2 19.2 16.6" fill="none" stroke="#241d17" stroke-width="1.5" stroke-linecap="round"/><path d="M24.6 12.4 L27.4 8.8" stroke="#c9a227" stroke-width="1.4"/>',
+ elephant:'<path d="M6.6 20.4 Q3.2 23.6 5.4 26.2" fill="none" stroke="#e8e2d2" stroke-width="1.7" stroke-linecap="round"/><path d="M9.4 20.8 Q6.4 24.6 8.6 26.8" fill="none" stroke="#e8e2d2" stroke-width="1.7" stroke-linecap="round"/><path d="M12.6 6.6 L21.4 6.6 L21.4 11.4 L12.6 11.4 Z" fill="currentColor" stroke="#241d17" stroke-width="0.9"/><path d="M13.6 6.6 L13.6 3.4 M20.4 6.6 L20.4 3.4" stroke="#241d17" stroke-width="1"/>',
+ bombard:'<path d="M8.6 15.4 L23.4 12.2 L23.4 17.4 L8.6 19.6 Z" fill="#4a4a48" stroke="#241d17" stroke-width="0.9"/><circle cx="25.8" cy="14.6" r="2.6" fill="#8a8a86" opacity="0.55"/><circle cx="29" cy="12.2" r="1.7" fill="#8a8a86" opacity="0.35"/>',
  militia:'<path d="M12.4 12.6 L19.6 12.6" stroke="#8a7550" stroke-width="1.1"/>',                                    // rag tunic, no helm
  spear:'<path d="M12.6 8.2 L19.4 8.2" stroke="#8a8a86" stroke-width="1.5"/>',                                        // kettle helm brim
  pike:'<path d="M8 29 L27.5 1.5" stroke="#7a5233" stroke-width="1.9"/><path d="M27 2.2 L30 -1 L29.2 4 Z" fill="#8a8a86" stroke="#241d17" stroke-width="0.5"/><path d="M12.6 7.6 L19.4 7.6" stroke="#c9c9c5" stroke-width="1.8"/><path d="M16 4.6 L16 1.6" stroke="#ffd257" stroke-width="1.6"/>',
@@ -1983,6 +2052,10 @@ const TIERART={
 };
 function artBase(t){return (ART[trackOf?trackOf(t):t]||ART[t]||ART.spear)+(TIERART[t]||'');}
 const TIERICON={   // small marks so the 16x16 list icons differ per tier too
+ axeman:'<path d="M11 5.4 Q14 4.2 14.4 7.6 Q13.8 11 11 9.6 Z" fill="#c9c9c5"/>',
+ camel:'<path d="M4.6 8.6 Q6 5.6 7.4 8.6 Q8.8 5.4 10.2 8.6" fill="none" stroke="#ffd257" stroke-width="1.1"/>',
+ elephant:'<path d="M3.4 10.6 Q1.8 12.4 2.8 13.6 M5.2 10.8 Q3.6 12.8 4.6 14" fill="none" stroke="#ffffff" stroke-width="1"/>',
+ bombard:'<path d="M4 8 L12 6.4 L12 9.2 L4 10.4 Z" fill="#4a4a48"/><circle cx="13.4" cy="7.6" r="1.4" fill="#8a8a86" opacity="0.6"/>',
  pike:'<path d="M12.4 1.6 L13.6 1.6" stroke="#ffd257" stroke-width="1.2"/>',
  marms:'<path d="M12.4 1.6 L13.6 1.6" stroke="#ffd257" stroke-width="1.2"/>',
  warbow:'<path d="M12.4 1.6 L13.6 1.6" stroke="#ffd257" stroke-width="1.2"/>',
@@ -2671,7 +2744,11 @@ function updateMap(){
     if(pv.cap)ph+='<text x="'+pv.cx+'" y="'+(pv.cy-hr-2.5*s)+'" font-size="'+CF+'" fill="#e0b830" text-anchor="middle" style="paint-order:stroke;stroke:#241d17;stroke-width:'+(2*s)+'px">&#9733;</text>';
     if(showLbl){
       let tag='';
-      if(gar){
+      // Once the garrison is drawn beside the city its badge carries the number, so the label
+      // stops repeating it - in the CoN references the number beside a city is its LEVEL, never
+      // its troop count. Zoomed out, where no garrison is drawn, the label is the only signal
+      // and keeps the count.
+      if(gar&&!(VB.w<=760)){
         if(own===G.player)tag=' ('+cnt(gar.u)+')';                 // your own cities show exact numbers
         else{const b=garrisonBand(cnt(gar.u));tag=' <tspan fill="'+b.cls+'">'+bandGlyph(cnt(gar.u))+'</tspan>';}
       }
@@ -2682,15 +2759,29 @@ function updateMap(){
   svg.querySelector('#gPin').innerHTML=ph;
   const close=VB.w<=CHIPTH;
   const fs=0.72*s*1.4;             // figure scale (screen-constant-ish)
+  const GAR_DX=19, GAR_DY=-15;     // garrison sits up and right of the city hex, clear of the label
+  // Nabeel's rule, from the CoN references: zoomed OUT a stack is one unit icon and one total;
+  // zoomed IN it splits into one badge per unit category; and the card at the bottom always lists
+  // every type in the stack. Field armies already worked exactly that way - `close` below is the
+  // switch. A garrison is just an army standing in a city, so it now obeys the same rule instead
+  // of being hidden. GAR_SHOW only decides when a garrison is worth drawing at all; past it the
+  // city label carries the city on its own.
+  const GAR_SHOW=VB.w<=760;
   let ah='';
   for(const cid in G.armies){
     const a=G.armies[cid];
     const cc=MAPD5.cells[cid];
     if(!cc)continue;
-    // A garrison folds into the city label, but the moment it steps onto the road it is an army in
-    // the field again and has to be visible — that was the whole point of marching out.
-    if(cc.city&&!onTheMarch(a))continue;
-    const c=unitXY(cid,a)||cc;
+    // v5.6h: a garrison used to be drawn NOWHERE — folded into the city label as "Frankfurt (10)"
+    // and invisible on the map, so you could not see what held a city, or tell a stack of knights
+    // from a stack of militia, without opening the drawer. Nabeel's CoN reference shows units
+    // standing BESIDE the city. A garrison is now drawn exactly like a field army, anchored to the
+    // city pin (which sits up to 54 map units off the cell centre) and offset clear of the hex and
+    // its label, so the city and the troops holding it read as two separate things.
+    const inCity=!!cc.city&&!onTheMarch(a);
+    if(inCity&&!GAR_SHOW)continue;              // zoomed out: the city label's count carries it
+    let c=unitXY(cid,a)||cc;
+    if(inCity){const pvc=provOf(cc.p); if(pvc)c={x:pvc.cx+GAR_DX*s, y:pvc.cy+GAR_DY*s};}
     const tot=cnt(a.u);
     if(!tot)continue;
     const col=empColor(a.e);
@@ -2704,7 +2795,14 @@ function updateMap(){
       ah+='<circle cx="'+c.x+'" cy="'+c.y+'" r="'+rr+'" fill="none" stroke="#fffbe8" stroke-width="'+(2*s)+'" stroke-dasharray="'+(6*s)+' '+(4*s)+'"/>';
     }
     ah+='<g transform="translate('+(c.x-16*s)+' '+(c.y-18*s)+') scale('+fs+')" style="color:'+col+'">'+artBase(dt)+tierChevrons(dt)+'</g>';
-    if(close){                        // zoomed out: total only (CoN style), even when selected
+    // Scouts report strength, not numbers: an enemy garrison keeps its band rather than an exact
+    // count, and never shows its composition. That fog rule predates this change and outranks it.
+    const fog=inCity&&a.e!==G.player;
+    if(fog){
+      const bnd=garrisonBand(tot);
+      ah+='<rect x="'+(c.x+11*s)+'" y="'+(c.y-6*s)+'" width="'+(24*s)+'" height="'+(14*s)+'" rx="'+(3.5*s)+'" fill="'+bnd.cls+'" stroke="#241d17" stroke-width="'+(0.9*s)+'"/>';
+      ah+='<text x="'+(c.x+23*s)+'" y="'+(c.y+4.5*s)+'" font-size="'+(9.5*s)+'" font-weight="bold" fill="#241d17" text-anchor="middle">'+bandGlyph(tot)+'</text>';
+    }else if(close){                   // zoomed in: one chip per unit category, the CoN stack read
       const types=UKEYS.filter(t=>a.u[t]);
       const cw2=22*s, chh=10*s;
       let chy=c.y-Math.min(types.length,6)*(chh+1)/2;
@@ -3136,7 +3234,7 @@ function openCityPanel(pid){
       tiers.forEach(t=>{
         const u=UNITS[t];
         if(canRecruit(pid,t)){
-          h+='<div class="buildrow"><span>'+uicon(t)+u.name+' &mdash; '+u.cost+'g <span style="opacity:0.7">'+u.dmg+' dmg &middot; '+u.hp+' hp &middot; '+(u.armor?u.armor+' armour':'no armour')+'</span></span><button '+((e.gold<u.cost||cappedT)?'disabled':'')+' onclick="buyUnit5(\''+pid+'\',\''+t+'\')">Buy</button></div>';
+          h+='<div class="buildrow"><span>'+uicon(t)+u.name+' &mdash; '+u.cost+'g <span style="opacity:0.7">'+u.dmg+' dmg &middot; '+u.hp+' hp &middot; '+(u.armor?u.armor+' armour':'no armour')+(u.ap?' &middot; <span style="color:#e08a3c">pierces armour</span>':'')+(u.beatsAlso?' &middot; <span style="color:#e08a3c">beats horse</span>':'')+'</span></span><button '+((e.gold<u.cost||cappedT)?'disabled':'')+' onclick="buyUnit5(\''+pid+'\',\''+t+'\')">Buy</button></div>';
         }else if(!nextLock){
           nextLock='<div class="meta" style="padding-left:4px">&#128274; '+u.name+' &mdash; needs '+recruitGateText(pid,t)+'</div>';
         }
