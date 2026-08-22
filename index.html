@@ -2131,10 +2131,26 @@ const FLAVOR={
 // ==== seg_zoom.js ====
 function applyVB(){$('map').setAttribute('viewBox',VB.x+' '+VB.y+' '+VB.w+' '+VB.h);}
 function fitView(){VB={x:0,y:0,w:MAPD5.W,h:MAPD5.H};applyVB();fitAspect(true);}
+// v5.6j: this clamped w and h independently and never re-fit the box to the screen, so at full
+// zoom a portrait phone ended up with a 180x112 LANDSCAPE viewBox. preserveAspectRatio="meet"
+// then letterboxed it: 286 screen pixels showing 180 map units, 1.59 px per unit, city hexes
+// 13px across, and thick empty bands above and below. fitAspect existed but zoomBy never called
+// it. Keep the box the same shape as the screen at every step, and clamp on the SHORTER axis so
+// "fully zoomed in" means the same amount of map in portrait and in landscape.
+const ZOOM_MIN_SHORT=100;              // tightest zoom: map units across the shorter screen axis
 function zoomBy(f){
+  const r=$('map').getBoundingClientRect();
+  const want=(r.width&&r.height)?r.width/r.height:MAPD5.W/MAPD5.H;
   const cx=VB.x+VB.w/2,cy=VB.y+VB.h/2;
-  VB.w=Math.max(180,Math.min(MAPD5.W*1.3,VB.w*f));
-  VB.h=Math.max(112,Math.min(MAPD5.H*1.3,VB.h*f));
+  let w=VB.w*f,h=VB.h*f;
+  if(w/h>want)w=h*want;else h=w/want;                  // match the screen's shape
+  const minW=want>=1?ZOOM_MIN_SHORT*want:ZOOM_MIN_SHORT;
+  // The zoom-out limit has to be big enough to cover the world on BOTH axes, or a tall portrait
+  // screen hits the stop while half the map is still off the sides. Deriving it from width alone
+  // (or height alone) capped portrait at 709 of 1750 world units. Take whichever axis binds.
+  const maxW=Math.max(MAPD5.W,MAPD5.H*want)*1.3;
+  if(w<minW)w=minW; else if(w>maxW)w=maxW;
+  VB.w=w;VB.h=w/want;
   VB.x=cx-VB.w/2;VB.y=cy-VB.h/2;
   applyVB();
 }
@@ -2171,8 +2187,15 @@ function updateLogBadge(){
   b.style.display=(n&&!open)?'block':'none';
   b.textContent=n>9?'9+':n;
 }
-const HELP_HTML='<b>The goal</b><ul><li>Hold <b>48 of the 80 cities</b> to win.</li></ul><b>Moving armies</b><ul><li>Tap an army, choose how many troops to send in the bar, press <b>Choose target</b>, then tap where to go.</li><li>Foot march 3 cells a turn, cavalry 5, siege engines 2.</li><li>Tap somewhere far and the army takes a <b>standing order</b> &mdash; it marches on its own each turn until it arrives.</li><li>The small <b>dots</b> scattered over the map are cell centres. That dot is the exact point an army must reach to take the cell.</li></ul><b>Fighting</b><ul><li>Attacking a defended city offers <b>Assault</b> (fight now) or <b>Lay siege</b> (starve it out).</li><li>An assault fights several exchanges. If neither side breaks, your army falls back wounded &mdash; press again or regroup.</li><li>A <b>dashed ring</b> around a city means it is <b>under siege</b>. The ring is drawn in the besieging empire&rsquo;s colour, and tapping the city says who and for how long.</li><li>Units have hit points and armour. Wounds heal every turn, fastest inside your own cities.</li></ul><b>Columns on the road</b><ul><li>An army that ends its turn part-way along a leg is a <b>column</b> &mdash; strung out on the march, not formed for battle.</li><li>Anything of yours standing beside <b>either end</b> of that leg may <b>strike</b> it. Those cells glow <b>red</b> when you choose a target.</li><li>A column fights at &minus;40% and never fights to the last man: it breaks off and falls back to the ground it left.</li><li>What it really loses is the march &mdash; the crossing it had made and its standing order. Roads are fast, but a fast army is an exposed one.</li></ul><b>Cities</b><ul><li>Tier 1 troops can be raised anywhere you rule. Tier 2 and 3 need <b>buildings</b>: Barracks, Archery Range, Stables, and a Siege Workshop for any siege engine.</li><li>Buildings may only be raised in your <b>homeland</b>, or in a conquered city once you <b>annex</b> it.</li><li>A freshly conquered city pays half tribute for 5 turns while the unrest settles.</li><li>Walls toughen the garrison and slow a siege.</li></ul><b>The sea</b><ul><li><b>Port cities</b> build War Galleys from the Recruit tab. The galley appears on the water beside the city.</li><li>Fleets sail 4 sea cells a turn, 6 once you have Admiralty. An enemy fleet blocks the way &mdash; you may strike it, but not sail past it.</li><li>Armies cross water by <b>boarding a fleet</b>: 3 troops per galley. Sail, then land them on a shore you choose. They cannot march the turn they come ashore.</li><li>An enemy fleet sitting on your harbour blockades it and stops you building ships there.</li></ul><b>Diplomacy</b><ul><li>You begin <b>at peace</b> with every crown. Their borders are sealed until you declare war from the <b>Diplomacy</b> panel.</li><li>Free lords &mdash; the grey cities &mdash; may be attacked at any time.</li><li>Enemy land is tinted red and hatched. Declaring war costs no gold, but every other crown thinks less of you.</li></ul><b>Research</b><ul><li>Two researches a turn. Each level adds 10% damage to its track.</li></ul>';
-function showHelp(){showModal('How to play',HELP_HTML,[['Close',closeModal,'primary']]);}
+const HELP_HTML='<b>The goal</b><ul><li>Hold <b>48 of the 80 cities</b> to win.</li></ul><b>Moving armies</b><ul><li>Tap an army, choose how many troops to send in the bar, then tap where to go. Picking an army arms it &mdash; the <b>Choose target</b> button is only there if you want it.</li><li>Foot march 3 cells a turn, cavalry 5, siege engines 2.</li><li>Tap somewhere far and the army takes a <b>standing order</b> &mdash; it marches on its own each turn until it arrives.</li><li>The small <b>dots</b> scattered over the map are cell centres. That dot is the exact point an army must reach to take the cell.</li></ul><b>Fighting</b><ul><li>Attacking a defended city offers <b>Assault</b> (fight now) or <b>Lay siege</b> (starve it out).</li><li>An assault fights several exchanges. If neither side breaks, your army falls back wounded &mdash; press again or regroup.</li><li>A <b>dashed ring</b> around a city means it is <b>under siege</b>. The ring is drawn in the besieging empire&rsquo;s colour, and tapping the city says who and for how long.</li><li>Units have hit points and armour. Wounds heal every turn, fastest inside your own cities.</li></ul><b>Columns on the road</b><ul><li>An army that ends its turn part-way along a leg is a <b>column</b> &mdash; strung out on the march, not formed for battle.</li><li>Anything of yours standing beside <b>either end</b> of that leg may <b>strike</b> it. Those cells glow <b>red</b> when you choose a target.</li><li>A column fights at &minus;40% and never fights to the last man: it breaks off and falls back to the ground it left.</li><li>What it really loses is the march &mdash; the crossing it had made and its standing order. Roads are fast, but a fast army is an exposed one.</li></ul><b>Cities</b><ul><li>Tier 1 troops can be raised anywhere you rule. Tier 2 and 3 need <b>buildings</b>: Barracks, Archery Range, Stables, and a Siege Workshop for any siege engine.</li><li>Buildings may only be raised in your <b>homeland</b>, or in a conquered city once you <b>annex</b> it.</li><li>A freshly conquered city pays half tribute for 5 turns while the unrest settles.</li><li>Walls toughen the garrison and slow a siege.</li></ul><b>The sea</b><ul><li><b>Port cities</b> build War Galleys from the Recruit tab. The galley appears on the water beside the city.</li><li>Fleets work exactly like armies: tap the fleet, then tap the sea you want. Tap an enemy fleet instead and you strike it.</li><li>Fleets sail 4 sea cells a turn, 6 once you have Admiralty. An enemy fleet blocks the way &mdash; you may strike it, but not sail past it.</li><li>Armies cross water by <b>boarding a fleet</b>: 3 troops per galley. Sail, then land them on a shore you choose. They cannot march the turn they come ashore.</li><li>An enemy fleet sitting on your harbour blockades it and stops you building ships there.</li></ul><b>Diplomacy</b><ul><li>You begin <b>at peace</b> with every crown. Their borders are sealed until you declare war from the <b>Diplomacy</b> panel.</li><li>Free lords &mdash; the grey cities &mdash; may be attacked at any time.</li><li>Enemy land is tinted red and hatched. Declaring war costs no gold, but every other crown thinks less of you.</li></ul><b>Research</b><ul><li>Two researches a turn. Each level adds 10% damage to its track.</li></ul>';
+// v5.6j: there was no version marker anywhere in the game, so "is the deployed file the current
+// one" could only ever be answered by diffing bytes. It is now on screen, at the foot of Help.
+const GAME_VERSION='v5.6j';
+function showHelp(){
+  showModal('How to play',
+    HELP_HTML+'<div class="meta" style="text-align:center;margin-top:10px;opacity:.65">Age of Crowns '+GAME_VERSION+'</div>',
+    [['Close',closeModal,'primary']]);
+}
 // garrison strength band for cities you do not own (no exact numbers — Nabeel's fog rule)
 function garrisonBand(n){
   if(!n)return {txt:'undefended',cls:'#7ec97e',bars:0};
@@ -2797,7 +2820,10 @@ function updateMap(){
     ah+='<g transform="translate('+(c.x-16*s)+' '+(c.y-18*s)+') scale('+fs+')" style="color:'+col+'">'+artBase(dt)+tierChevrons(dt)+'</g>';
     // Scouts report strength, not numbers: an enemy garrison keeps its band rather than an exact
     // count, and never shows its composition. That fog rule predates this change and outranks it.
-    const fog=inCity&&a.e!==G.player;
+    // v5.6j: this read `inCity && ...`, so the fog rule covered garrisons only and every enemy
+    // army in the open field handed you an exact headcount and, zoomed in, its full composition.
+    // Scouts report strength, not an order of battle. Fog every stack that is not yours.
+    const fog=a.e!==G.player;
     if(fog){
       const bnd=garrisonBand(tot);
       ah+='<rect x="'+(c.x+11*s)+'" y="'+(c.y-6*s)+'" width="'+(24*s)+'" height="'+(14*s)+'" rx="'+(3.5*s)+'" fill="'+bnd.cls+'" stroke="#241d17" stroke-width="'+(0.9*s)+'"/>';
@@ -2952,9 +2978,36 @@ function showUnitCards(){
 
 // ==== v5_ui_panels.js ====
 // ================= V5 selection, panels, division card, turn =================
+// v5.6j: seaClick already called offerWar() by name, but the function had never been written, so
+// that path threw a ReferenceError. Three call sites want it. Write it once.
+function offerWar(k,reason,after){
+  const nm=empName(k);
+  showModal('Declare war on '+nm+'?',
+    '<div class="meta">You are at peace with '+nm+'. '+(reason||'Their lands and armies cannot be touched until war is declared.')+'</div>'+
+    '<div class="meta">War costs no gold, but every other crown will note your appetite for conquest.</div>',
+    [['Declare war',()=>{closeModal();declareWar(G.player,k);renderAll();saveGame();if(after)after();},'primary'],
+     ['Keep the peace',()=>{closeModal();G.targeting=false;G.seaTargeting=false;G.marchInfo=null;renderAll();},'']]);
+}
 function armyClick(cid){
   if(G.over)return;
   if(G.targeting&&G.selArmy&&G.marchInfo&&G.marchInfo.targets[cid]){cellClick(cid);return;}
+  // v5.6j: an enemy stack you are at peace with is not a legal target, so it never appeared in
+  // marchInfo.targets and the tap fell through to "select that army" — a dead end in the info
+  // panel with nothing offered. cellClick already knows how to offer the declaration (blockerAt
+  // catches the army as well as the city), so hand it over rather than quietly changing selection.
+  // Only for a foreign stack: tapping your OWN other army must still switch the selection.
+  // Note there is deliberately no G.marchInfo test here. computeMarch leaves it null once an army
+  // has spent its movement, and an army that cannot march this turn is exactly the one whose
+  // player most wants to open the border now and set a standing order.
+  const _t=G.armies[cid];
+  if(G.targeting&&G.selArmy&&G.selArmy!==cid&&_t&&_t.e!==G.player&&!hostileTo(G.player,_t.e)){
+    const foeE=_t.e;
+    offerWar(foeE,'Their armies cannot be struck until war is declared.',()=>{
+      G.targeting=true;computeMarch();renderAll();
+      toast('War declared on '+empName(foeE)+'. Their lands are open.');
+    });
+    return;
+  }
   G.marchInfo=null;G.seaTargeting=false;G.selSea=null;G.selCity=null;
   if(G.selArmy!==cid){G.send={};G.forced=false;}
   G.selArmy=cid;
@@ -3502,7 +3555,15 @@ function seaClick(sid){
     if(me&&me.e===G.player){
       const foe=navyAt(sid);
       if(foe&&foe.e!==G.player){
-        if(!hostileTo(G.player,foe.e)){offerWar(foe.e);return;}
+        // v5.6j: this called offerWar(), which does not exist anywhere in the file, so tapping a
+        // fleet you were at peace with threw a ReferenceError and the turn simply stopped. Use the
+        // same declaration modal the land path already uses.
+        if(!hostileTo(G.player,foe.e)){
+          const foeE=foe.e;
+          offerWar(foeE,'Their fleets cannot be touched until war is declared.',
+            ()=>toast('War declared on '+empName(foeE)+'. Strike that fleet again.'));
+          return;
+        }
         const rep=navalClash(G.selSea,sid,G.player);
         if(rep){
           log(rep.win?('Your fleet broke '+empName(rep.def)+"'s galleys at sea."):('Your fleet was shattered by '+empName(rep.def)+' at sea.'),rep.win?'':'bad');
@@ -3514,7 +3575,11 @@ function seaClick(sid){
             [['Continue',closeModal,'primary']]);
           return;
         }
-        toast('That fleet is out of reach this turn.');
+        // v5.6j: one message used to cover two different causes, so a fleet that had simply spent
+        // its turn read as a fleet that was too far away. Say which it is.
+        const meF=navyAt(G.selSea);
+        if(meF&&fleetRange(meF)<=0)toast('This fleet has already sailed this turn &mdash; strike next turn.');
+        else toast('That fleet is beyond this turn&rsquo;s sail.');
         return;
       }
       const cost=moveNavy(G.selSea,sid,G.player);
@@ -3535,8 +3600,20 @@ function seaClick(sid){
       return;
     }
   }
-  G.seaTargeting=false;G.targeting=false;G.selArmy=null;G.selCity=null;
+  G.targeting=false;G.selArmy=null;G.selCity=null;
   G.selSea=f?sid:null;
+  // v5.6j: armyClick arms targeting the moment you pick your own army, so armies are tap-then-tap.
+  // seaClick did not, and the only thing that set G.seaTargeting was the "Choose target" button.
+  // The natural gesture — tap fleet, tap destination — therefore fell straight through to here,
+  // which cleared the selection and said nothing at all. That is the whole of v5.6i #8 and #9:
+  // the fleet had sail left and an adjacent enemy, and both worked once the flag was on.
+  // Arm the fleet on selection, exactly as land does. The button stays, and is now a no-op.
+  if(f&&f.e===G.player){
+    startSeaTargeting();
+    if(fleetRange(f)<=0)toast('This fleet has no sail left this turn &mdash; it can move again next turn.');
+    return;
+  }
+  G.seaTargeting=false;
   renderAll();
   if(f)openSeaPanel(sid); else closeDrawer();
 }
