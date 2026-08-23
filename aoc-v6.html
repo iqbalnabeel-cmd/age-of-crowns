@@ -1476,12 +1476,19 @@ function interceptTargets(fromCid,e){
   }
   return out;
 }
-function placeArmy(cellId,e,force,mv,w,dmap){
+// muster=true means these troops APPEARED here rather than marched here: a recruit finishing its
+// training, not a column arriving. The distinction matters because merging takes the larger spent
+// movement, on the reasonable ground that a stack moves at the pace of its slowest part. But a
+// unit that just stepped out of the barracks never moved at all, and stamping its 99 onto the
+// garrison froze the whole stack for the turn. Nabeel hit this with a 36-strong garrison pinned by
+// one finishing spearman. It was wrong in v5.6m too; v6 made it constant, because now every army
+// is a garrison sitting on a city.
+function placeArmy(cellId,e,force,mv,w,dmap,muster){
   const ex=G.armies[cellId];
   if(ex&&ex.e===e){
     for(const t in force)ex.u[t]=(ex.u[t]||0)+force[t];
     if(dmap){ex.d=ex.d||{};for(const t in dmap)ex.d[t]=(ex.d[t]||0)+dmap[t];}
-    ex.mv=Math.max(ex.mv,mv);
+    if(!muster)ex.mv=Math.max(ex.mv,mv);
     ex.w=ex.w||(w?1:0);
   }else{
     G.armies[cellId]={e,u:force,mv,w:w?1:0};
@@ -1791,7 +1798,7 @@ function processTraining(empKey){
       if(q[i].left<=0){done[q[i].t]=(done[q[i].t]||0)+1;q.splice(i,1);}
     }
     if(cnt(done)){
-      placeArmy(provOf(pid).citycell,empKey,done,99,false);
+      placeArmy(provOf(pid).citycell,empKey,done,99,false,null,true);   // mustered, not marched
       if(empKey===G.player)log(cnt(done)+' fresh troop'+(cnt(done)>1?'s':'')+' muster in <b>'+provOf(pid).city+'</b>.','');
     }
     if(!q.length)delete G.train[pid];
