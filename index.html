@@ -264,6 +264,176 @@ h1,h2,h3{font-weight:normal}
   button{padding:8px 12px}
   .buildrow button{padding:6px 14px}
 }
+
+/* ================= v5.6k: the three CoN-style screens =================
+   #1 The division card was allowed 70% of the screen and each unit took a tall tile with its
+   health bar on a line of its own, so a five-type stack really did fill the phone. Units are now
+   34px single-line rows: art, name, a thin health bar, count, stepper. The TROOPS/STRENGTH/SENDING
+   block that sat beside them is folded into one line of the header. Cap drops to 46%.
+   #2 Buildings were a text list. They are now tiles you press, grouped into named sections.
+   #5 Recruit was one long run of every unit in the roster. It now has a row of track tabs. */
+.dcSub b{color:var(--gold)}
+.dcSub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}   /* it was wrapping to a second line */
+.pill.send{color:var(--gold);border-color:var(--gold)}
+.pill.send.part{color:#e08a3c;border-color:#e08a3c}
+.dcA1,.dcA2{display:flex;gap:6px;flex:1 1 100%}
+.dcA1>button,.dcA2>button{flex:1 1 auto;min-width:0}
+/* nowrap matters: the older mobile rule set flex-wrap:wrap, which on a 344px Fold cover pushed the
+   stepper onto a second line and doubled every row back to 68px. */
+.tile{display:flex;align-items:center;gap:7px;padding:5px 7px;background:#241d17;border:1px solid var(--border);border-radius:7px;flex-wrap:nowrap}
+.tile .tico{flex:none;display:flex;width:24px;height:24px}
+.tile .tico svg{width:24px;height:24px}
+.tile .tnm{flex:1 1 auto;min-width:0;font-size:12.5px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tile .thp{flex:none;width:34px;height:4px;border-radius:2px;background:#3a3025;overflow:hidden}
+.tile .thp i{display:block;height:100%}
+.tile .tn{flex:none;font-size:12.5px;color:var(--muted);min-width:20px;text-align:right}
+.tile .tstep{flex:none;display:flex;align-items:center;gap:5px}
+.tile .tstep button{padding:3px 10px;font-size:15px;line-height:17px;min-width:0}
+.tile .tstep>span{font-size:14px;min-width:17px;text-align:center;color:var(--gold);font-weight:bold}
+/* sub-tabs, shared by Recruit tracks and anywhere else a second tier of tabs is wanted */
+.stabs{display:flex;gap:4px;overflow-x:auto;padding:2px 0 6px;-webkit-overflow-scrolling:touch}
+.stabs button{flex:0 0 auto;padding:5px 10px;font-size:12px;border-radius:14px;background:#241d17;color:var(--muted);border:1px solid var(--border)}
+.stabs button.on{background:var(--gold);color:#241d17;border-color:var(--gold);font-weight:bold}
+/* building rows, laid out like the CoN city screen: icon + level badge, details, action button */
+.bsec{font-size:11px;letter-spacing:1px;color:var(--muted);margin:12px 0 6px;text-transform:uppercase}
+.bsec:first-child{margin-top:2px}
+.brow2{position:relative;display:flex;align-items:center;gap:9px;padding:9px 8px;margin-bottom:7px;
+  background:#241d17;border:1px solid var(--border);border-radius:8px}
+.brow2::before,.brow2::after{content:'';position:absolute;width:9px;height:9px;border:2px solid var(--gold);opacity:.5}
+.brow2::before{left:3px;top:3px;border-right:0;border-bottom:0}
+.brow2::after{right:3px;bottom:3px;border-left:0;border-top:0}
+.brow2.maxed{border-color:var(--gold)}
+.bic{position:relative;flex:none;width:40px;height:40px;display:flex;align-items:center;justify-content:center}
+.bic svg{width:34px;height:34px}
+.blv{position:absolute;left:-3px;bottom:-3px;min-width:16px;height:16px;line-height:16px;text-align:center;
+  border-radius:8px;background:#3a3025;color:var(--muted);font-size:10px;font-weight:bold;padding:0 3px}
+.blv.on{background:#4f8f4f;color:#fff}
+.bmid{flex:1 1 auto;min-width:0}
+.bmid .bnm{font-size:13px;font-weight:bold;color:var(--text);line-height:1.2}
+.bcost{display:flex;gap:9px;margin:2px 0 1px}
+.bcost .ci{font-size:11.5px;color:var(--gold)}
+.bmid .bds{font-size:10.5px;color:var(--muted);line-height:1.25}
+.bact{flex:none;display:flex;align-items:center}
+.bact button{padding:9px 10px;font-size:12px;white-space:nowrap}
+.bdone{font-size:11px;color:var(--gold);font-weight:bold}
+/* two tiers of tabs, exactly as the CoN recruit screen does it */
+.stabs.tier1 button{padding:6px 12px;font-size:12.5px;border-radius:6px 6px 0 0}
+.stabs.tier1 button svg{width:14px;height:14px;vertical-align:-2px}
+.stabs.tier2{padding-top:0;margin-top:-4px}
+.stabs.tier2 button{font-size:11.5px;padding:4px 10px}
+@media(max-width:900px){
+  #abar{max-height:46%}
+  /* .dcTop MUST stay display:flex. Setting it to block took .dcTiles out of the flex chain, so
+     its flex:1 1 auto / min-height:0 stopped resolving, the list grew past the card instead of
+     scrolling, and All / None / Forced march ended up painted underneath the unit rows. Hiding
+     .dcSum is enough: .dcTop then has a single flex child that fills the space. */
+  .dcSum{display:none}          /* folded into the header line */
+  .dcTiles{gap:5px}
+  .dcHead{margin-bottom:5px}
+}
+/* ============ v5.6m: the CoN division card ============
+   Nabeel's screen recording settled the shape. The card itself carries NO controls: it is a name
+   banner, one stat strip and a row of unit chips. The buttons float above it over the map in two
+   rows, and the per-unit numbers live in a Split dialog. That is why CoN's card is a tenth of the
+   screen while mine was 43%: I had the send steppers inside it. */
+#modebar{display:none;position:absolute;left:50%;transform:translateX(-50%);top:8px;z-index:8;
+  background:rgba(24,19,14,.96);border:1px solid var(--gold);border-radius:18px;
+  padding:6px 8px 6px 14px;display:none;align-items:center;gap:10px;max-width:92%}
+#modebar.show{display:flex}
+#modebar .mtx{font-size:12.5px;color:var(--gold);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#modebar button{border-radius:50%;width:24px;height:24px;padding:0;line-height:1;font-size:15px;flex:none}
+/* the floating action grid */
+#actbar{display:none;position:absolute;left:50%;transform:translateX(-50%);z-index:7;
+  flex-direction:column;gap:6px;align-items:flex-start;pointer-events:none}
+/* rows are left-aligned, not centred: a 2-button row centred over a 4-button row leaves the
+   columns staggered and the whole cluster reads as sloppy. */
+#actbar.show{display:flex}
+#actbar .arow{display:flex;gap:6px;pointer-events:auto}
+.abtn{width:62px;padding:7px 2px 5px;border-radius:9px;border:1px solid var(--border);
+  background:rgba(36,29,23,.95);display:flex;flex-direction:column;align-items:center;gap:3px;
+  font-size:9.5px;letter-spacing:.5px;color:var(--text);text-transform:uppercase;line-height:1.1}
+.abtn .aic{font-size:19px;line-height:20px}
+.abtn.on{background:var(--gold);color:#241d17;border-color:var(--gold);font-weight:bold}
+.abtn.go{background:#3f7a3f;border-color:#5aa05a;color:#fff}
+.abtn.hit{background:#8f3535;border-color:#c94040;color:#fff}
+.abtn[disabled]{opacity:.38;filter:grayscale(1)}
+/* the card */
+#abar .dcBanner{display:flex;align-items:center;gap:9px}
+.dcFlag{flex:none;width:34px;height:24px;border-radius:3px;border:1px solid #241d17;
+  background:linear-gradient(180deg,var(--fc,#888) 0 33%,#f5edd8 33% 66%,var(--fc,#888) 66% 100%)}
+.dcName{flex:1 1 auto;min-width:0}
+.dcName .n1{font-size:14px;font-weight:bold;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dcName .n2{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.dcInfo{flex:none;width:26px;height:26px;border-radius:50%;padding:0;font-size:13px;line-height:1}
+.dcStrip{display:flex;align-items:center;gap:12px;margin-top:6px;padding:5px 4px;
+  border-top:1px solid var(--border);border-bottom:1px solid var(--border);overflow-x:auto}
+.dcStrip .st{display:flex;align-items:center;gap:4px;font-size:12.5px;color:var(--text);white-space:nowrap;flex:none}
+.dcStrip .st i{font-style:normal;opacity:.75;font-size:12px}
+.dcStrip .st.warn{color:#e08a3c}
+.dcStrip .st.bad{color:#c94040}
+.dcChips{display:flex;gap:7px;margin-top:7px;overflow-x:auto;padding-bottom:2px}
+.uchip{flex:none;width:52px;position:relative;display:flex;flex-direction:column;align-items:center;gap:2px}
+.uchip .dia{width:44px;height:44px;transform:rotate(45deg);border-radius:7px;
+  background:linear-gradient(160deg,#3a6f8f,#24485e);border:1px solid #6fa8c8;
+  display:flex;align-items:center;justify-content:center;overflow:hidden}
+.uchip .dia>span{transform:rotate(-45deg);display:flex}
+.uchip .dia svg{width:26px;height:26px}
+.uchip .cn{position:absolute;right:2px;bottom:12px;min-width:15px;height:15px;line-height:15px;
+  text-align:center;border-radius:3px;background:#241d17;border:1px solid var(--border);
+  font-size:10px;font-weight:bold;color:#fff;padding:0 2px}
+.uchip .chev{position:absolute;left:14px;top:-4px;font-size:10px;color:var(--gold);letter-spacing:-2px}
+.uchip .cb{width:44px;height:3px;border-radius:2px;background:#3a3025;overflow:hidden;margin-top:9px}
+.uchip .cb i{display:block;height:100%}
+.uchip .cnm{font-size:8.5px;line-height:10px;color:var(--muted);max-width:52px;text-align:center;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* the split dialog */
+#splitdlg{display:none;position:fixed;inset:0;z-index:40;background:rgba(0,0,0,.55);
+  align-items:center;justify-content:center;padding:14px}
+#splitdlg.show{display:flex}
+.spBox{width:100%;max-width:420px;max-height:88%;overflow-y:auto;background:var(--panel);
+  border:1px solid var(--gold);border-radius:10px}
+.spHead{display:flex;align-items:center;justify-content:space-between;padding:11px 13px;
+  background:#f5edd8;color:#241d17;border-radius:9px 9px 0 0}
+.spHead h3{margin:0;font-size:15px;letter-spacing:1px;text-transform:uppercase}
+.spHead button{background:#c94040;border-color:#c94040;color:#fff;padding:3px 10px;font-size:14px}
+.spRow{display:flex;align-items:center;gap:10px;padding:10px 11px;border-bottom:1px solid var(--border)}
+.spRow .uchip{width:46px}
+.spRow .uchip .dia{width:38px;height:38px}
+.spRow .uchip .dia svg{width:22px;height:22px}
+.spMid{flex:1 1 auto;min-width:0}
+.spNm{font-size:11.5px;color:var(--text);margin-bottom:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.spRow input[type=range]{width:100%;accent-color:var(--gold);height:24px}
+.spNum{flex:none;width:46px;text-align:center;font-size:16px;font-weight:bold;padding:5px 0;
+  background:#f5edd8;color:#241d17;border-radius:4px}
+.spAct{display:flex;gap:10px;justify-content:center;padding:12px}
+.spAct .abtn{width:74px}
+.spNote{padding:0 12px 10px;font-size:11px;color:var(--muted);text-align:center}
+/* A landscape phone is only 330px tall in total, so 46% of it is 152px and the action row falls off
+   the bottom. The old 70% cap was never the problem on those screens: it was the problem on a
+   736px-tall portrait phone, where it meant 515px of card. Cap by what the screen actually has.
+   This block must come AFTER the one above, or equal specificity lets 46% win here too. */
+@media(max-width:900px) and (max-height:430px){
+  #abar{max-height:76%}
+  /* A landscape phone is 330px tall. The card plus two button rows came to 263px of that, leaving
+     67px of map, which is useless. Shrink both on short screens rather than letting them eat it. */
+  #abar{padding:6px 9px}
+  .dcFlag{width:26px;height:18px}
+  .dcName .n1{font-size:12.5px}
+  .dcName .n2{font-size:10px}
+  .dcStrip{margin-top:4px;padding:3px 2px;gap:9px}
+  .dcStrip .st{font-size:11px}
+  .dcChips{margin-top:4px;gap:5px}
+  .uchip{width:40px}
+  .uchip .dia{width:32px;height:32px}
+  .uchip .dia svg{width:19px;height:19px}
+  .uchip .cn{bottom:9px;height:13px;line-height:13px;font-size:9px}
+  .uchip .cb{width:32px;margin-top:5px}
+  .uchip .cnm{display:none}   /* no room for labels on a landscape phone */
+  .abtn{width:52px;padding:4px 2px 3px;font-size:8.5px}
+  .abtn .aic{font-size:15px;line-height:16px}
+  #actbar{gap:4px}
+  #actbar .arow{gap:4px}
+}
 </style>
 </head>
 <body>
@@ -319,7 +489,10 @@ h1,h2,h3{font-weight:normal}
         <div id="dHead"><span id="dTitle"></span><button id="dClose" onclick="closeDrawer(true)">&times;</button></div>
         <div id="panel"></div>
       </div>
+      <div id="modebar"></div>
+      <div id="actbar"></div>
       <div id="abar"></div>
+      <div id="splitdlg"></div>
       <div id="logdrawer">
         <div id="dHead2"><h3>Chronicle</h3><button onclick="toggleLog(false)">&times;</button></div>
         <div id="log"></div>
@@ -423,6 +596,26 @@ const BLD={
  granary:{name:'Granary',icon:'spear',cost:[60],turns:2,max:1,desc:'Feeds a bigger muster: this city can recruit 12 troops per turn instead of 10'}
 };
 const BKEYS=Object.keys(BLD);
+// v5.6k (#2): "Need proper section for each building." Grouped by what the building is FOR, which
+// is the question you are actually asking when you open this screen.
+const BLD_SECTIONS=[
+ {name:'Recruitment',keys:['barracks','range','stables','workshop']},
+ {name:'Defence',keys:['walls']},
+ {name:'Economy',keys:['market','granary']}
+];
+// v5.6k, second pass: Nabeel's CoN reference shot shows TWO rows of tabs, not one. Row 1 is the
+// domain (BUILDING / GROUND / AIR / SEA / ...), row 2 is the sub-type within it (INFANTRY /
+// ARMORED / SUPPORT). "Unit types and sub-types tabs" meant exactly that, two tiers. My first
+// attempt put all six tracks in one flat row, which is the sub-type tier with no type tier above.
+const REC_DOMAINS=[
+ {k:'ground',name:'Ground',icon:'sword',subs:[
+   {k:'inf',name:'Infantry',tracks:['spear','sword']},
+   {k:'rng',name:'Ranged', tracks:['longbow','crossbow']},
+   {k:'mtd',name:'Mounted',tracks:['cavalry']},
+   {k:'sge',name:'Siege',  tracks:['catapult']}]},
+ {k:'sea',name:'Sea',icon:'ship',subs:[
+   {k:'gal',name:'Galleys',tracks:[]}]}
+];
 const ANNEX_KEY='__annex';                 // pass 4e: annexation occupies the same one-project-per-city slot
 const SIEGE_ATTR=[0.22,0.16,0.11,0.07];    // garrison starvation per turn by wall level
 
@@ -1273,6 +1466,7 @@ function battle5(fromCell,toCell,force,attackerKey,opts){
   const isCityCell=!!cell.city;
   const isCap=isCityCell&&!!provOf(cell.p).cap;
   const rep={fromCell,toCell,attackerKey,defOwner:def?def.e:'neutral',defVolley:0,attVolley:0,attLost:0,defLost:0,win:false,held:false,city:isCityCell?provOf(cell.p).city:null};
+  rep.defWas=def?Object.assign({},def.u):{};   // v5.6k: what you actually faced, revealed once the fighting is over
   if(G.animQ&&!(opts&&opts.noAnim))G.animQ.push({from:fromCell,to:toCell,e:attackerKey,t:domType(force)});
   if(!def||!cnt(def.u)){
     if(def)delete G.armies[toCell];
@@ -1600,6 +1794,21 @@ function advanceOrders(e){
       cur=nxt;
     }
   }
+}
+// v5.6m: CoN puts "Arrival in 19 min 38 sec" on the cell you are aiming at. This game runs on
+// turns, so the same idea reads as "arrives in N turns". Works for any cell, ordered or not.
+function etaToCell(fromCid,toCid){
+  const a=G.armies[fromCid];
+  if(!a)return null;
+  if(G.marchInfo&&G.marchInfo.targets[toCid])return 0;   // reachable this turn
+  const path=fullPathTo(fromCid,toCid,a.e);
+  if(!path||path.length<2)return null;
+  let d=0;
+  for(let i=0;i+1<path.length;i++)d+=stepCost(path[i],path[i+1]);
+  if(a.to&&a.p)d-=a.p*stepCost(fromCid,a.to);
+  const want={};UKEYS.forEach(t=>{want[t]=Math.max(0,Math.min((G.send&&G.send[t])||0,a.u[t]||0));});
+  const rng=Math.max(0.1,forceRange(a,cnt(want)?want:a.u)+(G.forced?2:0));
+  return Math.max(1,Math.ceil(d/rng));
 }
 function orderEtaTurns(cid){
   const a=G.armies[cid];
@@ -2082,15 +2291,28 @@ function uicon(t,col){
   return '<svg class="uic" viewBox="0 0 16 16" style="color:'+(col||'#e8dcc8')+'">'+iconBase(t)+pip+'</svg>';
 }
 function mapIcon(t,x,y,col){return '<g transform="translate('+x+' '+y+') scale(0.8)" style="color:'+col+'">'+iconBase(t)+'</g>';}
-function battleCard(aForce,aOwner,dForce,dOwner){
-  function side(force,ownerKey){
+// v5.6k: fog of war now covers land as well as sea, and it holds right up until the fighting
+// starts. Before this the pre-battle card printed the defender's full order of battle and had a
+// Cancel button beside it, so a player could open the attack dialog purely to read the enemy and
+// back out for free. That made the map and panel fog decorative. Pass reveal=true only for the
+// AFTER-battle report, where you have paid for the knowledge.
+function battleCard(aForce,aOwner,dForce,dOwner,reveal){
+  function side(force,ownerKey,fog){
     let h='<div class="bcol"><h4 style="background:'+empColor(ownerKey)+'">'+empName(ownerKey)+'</h4>';
+    if(fog){
+      const b=garrisonBand(cnt(force));
+      h+='<div class="tot" style="color:'+b.cls+'">'+b.txt+'</div>';
+      h+='<div class="brow" style="opacity:.75;display:block;text-align:center">'+bandGlyph(cnt(force))+'</div>';
+      h+='<div class="brow" style="opacity:.75;display:block;font-size:11px;text-align:center">Scouts report strength,<br>not numbers.</div>';
+      return h+'</div>';
+    }
     h+='<div class="tot">'+cnt(force)+' troops</div>';
     UKEYS.forEach(t=>{ if(force[t]) h+='<div class="brow">'+uicon(t)+'<span>'+UNITS[t].name+'</span><span class="n">'+force[t]+'</span></div>'; });
     if(!cnt(force))h+='<div class="brow">Undefended</div>';
     return h+'</div>';
   }
-  return '<div class="bcard">'+side(aForce,aOwner)+side(dForce,dOwner)+'</div>';
+  const fogDef=!reveal&&dOwner!==G.player;
+  return '<div class="bcard">'+side(aForce,aOwner,false)+side(dForce,dOwner,fogDef)+'</div>';
 }
 
 // ==== seg_common.js ====
@@ -2190,7 +2412,7 @@ function updateLogBadge(){
 const HELP_HTML='<b>The goal</b><ul><li>Hold <b>48 of the 80 cities</b> to win.</li></ul><b>Moving armies</b><ul><li>Tap an army, choose how many troops to send in the bar, then tap where to go. Picking an army arms it &mdash; the <b>Choose target</b> button is only there if you want it.</li><li>Foot march 3 cells a turn, cavalry 5, siege engines 2.</li><li>Tap somewhere far and the army takes a <b>standing order</b> &mdash; it marches on its own each turn until it arrives.</li><li>The small <b>dots</b> scattered over the map are cell centres. That dot is the exact point an army must reach to take the cell.</li></ul><b>Fighting</b><ul><li>Attacking a defended city offers <b>Assault</b> (fight now) or <b>Lay siege</b> (starve it out).</li><li>An assault fights several exchanges. If neither side breaks, your army falls back wounded &mdash; press again or regroup.</li><li>A <b>dashed ring</b> around a city means it is <b>under siege</b>. The ring is drawn in the besieging empire&rsquo;s colour, and tapping the city says who and for how long.</li><li>Units have hit points and armour. Wounds heal every turn, fastest inside your own cities.</li></ul><b>Columns on the road</b><ul><li>An army that ends its turn part-way along a leg is a <b>column</b> &mdash; strung out on the march, not formed for battle.</li><li>Anything of yours standing beside <b>either end</b> of that leg may <b>strike</b> it. Those cells glow <b>red</b> when you choose a target.</li><li>A column fights at &minus;40% and never fights to the last man: it breaks off and falls back to the ground it left.</li><li>What it really loses is the march &mdash; the crossing it had made and its standing order. Roads are fast, but a fast army is an exposed one.</li></ul><b>Cities</b><ul><li>Tier 1 troops can be raised anywhere you rule. Tier 2 and 3 need <b>buildings</b>: Barracks, Archery Range, Stables, and a Siege Workshop for any siege engine.</li><li>Buildings may only be raised in your <b>homeland</b>, or in a conquered city once you <b>annex</b> it.</li><li>A freshly conquered city pays half tribute for 5 turns while the unrest settles.</li><li>Walls toughen the garrison and slow a siege.</li></ul><b>The sea</b><ul><li><b>Port cities</b> build War Galleys from the Recruit tab. The galley appears on the water beside the city.</li><li>Fleets work exactly like armies: tap the fleet, then tap the sea you want. Tap an enemy fleet instead and you strike it.</li><li>Fleets sail 4 sea cells a turn, 6 once you have Admiralty. An enemy fleet blocks the way &mdash; you may strike it, but not sail past it.</li><li>Armies cross water by <b>boarding a fleet</b>: 3 troops per galley. Sail, then land them on a shore you choose. They cannot march the turn they come ashore.</li><li>An enemy fleet sitting on your harbour blockades it and stops you building ships there.</li></ul><b>Diplomacy</b><ul><li>You begin <b>at peace</b> with every crown. Their borders are sealed until you declare war from the <b>Diplomacy</b> panel.</li><li>Free lords &mdash; the grey cities &mdash; may be attacked at any time.</li><li>Enemy land is tinted red and hatched. Declaring war costs no gold, but every other crown thinks less of you.</li></ul><b>Research</b><ul><li>Two researches a turn. Each level adds 10% damage to its track.</li></ul>';
 // v5.6j: there was no version marker anywhere in the game, so "is the deployed file the current
 // one" could only ever be answered by diffing bytes. It is now on screen, at the foot of Help.
-const GAME_VERSION='v5.6j';
+const GAME_VERSION='v5.6m';
 function showHelp(){
   showModal('How to play',
     HELP_HTML+'<div class="meta" style="text-align:center;margin-top:10px;opacity:.65">Age of Crowns '+GAME_VERSION+'</div>',
@@ -2500,9 +2722,13 @@ function loadGame(){
 // The new format drops everything transient, indexes every repeated string (cell, province, unit,
 // building and empire keys all become integers), run-length encodes map ownership, then deflates.
 // 81,516 -> about 2,660 characters, roughly 31x shorter, and small enough to fit in a QR code.
-const SAVE_TAG='AOC6-';            // deflated
+const SAVE_TAG='AOC6-';            // deflate + base64: still read, no longer written
+const SAVE_TAG9='AOC9-';           // deflate + basE91: what v5.6k writes
 const SAVE_TAG_RAW='AOC6J-';       // same schema, uncompressed, for browsers without CompressionStream
-const SAVE_LOG_LINES=4;           // how much chronicle rides along
+// v5.6k (#10): four lines of chronicle text cost 216 characters of the finished code, about 8% of
+// it, and prose is the one thing in the save that deflate cannot squeeze. Two lines is enough to
+// tell you where you were when you pick the game up on another device.
+const SAVE_LOG_LINES=2;           // how much chronicle rides along
 function saveIndexes(){
   return {emps:['neutral',...Object.keys(EMPIRES)],
           CK:Object.keys(MAPD5.cells).sort(),
@@ -2516,33 +2742,63 @@ function packSave(){
   CK.forEach(id=>{const v=EI(G.cellOwner[id]||'neutral');
     if(v===prev)run++;else{if(prev!==null)c+=prev.toString(36)+run.toString(36)+',';prev=v;run=1;}});
   if(prev!==null)c+=prev.toString(36)+run.toString(36);
-  const a=[];
+  // v5.6k (#10): armies were 51% of the whole save code. Two things were paying for that.
+  // First, every army carried its full ten-slot row even when seven slots held their default:
+  // ",-1,-1,0,-1,[]" is fourteen characters of nothing, on every one of ~95 armies. Trailing
+  // defaults are now trimmed, and unpackSave already read those slots defensively (r[3]||0,
+  // r[5]>=0, r[9]&&r[9].length), so a short row decodes correctly with no change there.
+  // Second, cell indexes were absolute three-digit numbers in arbitrary order. Sorted and
+  // delta-encoded they become small numbers that repeat, which is what deflate is good at.
+  const A_DEF=[NaN,NaN,NaN,0,0,-1,-1,0,-1,[]];
+  const N_DEF=[NaN,NaN,NaN,0,[]];
+  function trimTail(row,defs){
+    let n=row.length;
+    while(n>0){
+      const d=defs[n-1],v=row[n-1];
+      const isDef=Array.isArray(d)?(Array.isArray(v)&&!v.length):(v===d);
+      if(!isDef)break;
+      n--;
+    }
+    return n===row.length?row:row.slice(0,n);
+  }
+  const rows=[];
   for(const cid in G.armies){const x=G.armies[cid];
     const u=[];for(const t in x.u)if(x.u[t])u.push(UI(t),x.u[t]);
     const d=[];if(x.d)for(const t in x.d)if(x.d[t])d.push(UI(t),Math.round(x.d[t]*100));   // wounds to 0.01 hp; a unit needs 6+ hp to fall
-    a.push([CK.indexOf(cid),EI(x.e),u,x.mv||0,x.w?1:0,x.ord?CK.indexOf(x.ord):-1,
+    rows.push([CK.indexOf(cid),EI(x.e),u,x.mv||0,x.w?1:0,x.ord?CK.indexOf(x.ord):-1,
             x.to?CK.indexOf(x.to):-1,x.p?Math.round(x.p*1000):0,x.siege?CK.indexOf(x.siege):-1,d]);}
-  const n=[];
+  rows.sort((p,q)=>p[0]-q[0]);
+  let prevIx=0;
+  const a=rows.map(r=>{const abs=r[0];r[0]=abs-prevIx;prevIx=abs;return trimTail(r,A_DEF);});
+  const nrows=[];
   for(const sid in G.navy){const f=G.navy[sid];
     const ld=[];if(f.load)for(const t in f.load)if(f.load[t])ld.push(UI(t),f.load[t]);
-    n.push([SK.indexOf(sid),EI(f.e),f.n,f.mv||0,ld]);}
+    nrows.push([SK.indexOf(sid),EI(f.e),f.n,f.mv||0,ld]);}
+  nrows.sort((p,q)=>p[0]-q[0]);
+  let prevS=0;
+  const n=nrows.map(r=>{const abs=r[0];r[0]=abs-prevS;prevS=abs;return trimTail(r,N_DEF);});
   const e=[];
   for(const k in G.emp){const m=G.emp[k],t=m.tech||{};
     e.push([EI(k),m.gold,m.alive?1:0,m.ai?1:0,m.pers,t.blades|0,t.fletch|0,t.horse|0,t.siege|0,t.sea|0,m.lastResearch||0]);}
   const i=[];
   for(const k in G.dip){const v=G.dip[k],s=k.split('|');
     i.push([EI(s[0]),EI(s[1]),v.state==='war'?1:0,v.rel||0,v.truce||0,v.since||0]);}
+  // Every one of these is a list keyed by province index. Sorted and delta-encoded the keys become
+  // small repeated numbers instead of scattered three-digit ones, which deflate handles far better.
+  const pdelta=list=>{list.sort((p,q2)=>p[0]-q2[0]);let prev=0;
+    return list.map(r=>{const abs=r[0];r[0]=abs-prev;prev=abs;return r;});};
   const b=[];
   for(const pid in G.bld){const o=G.bld[pid],v=[];
     BKEYS.forEach((bk,ix)=>{if(o[bk])v.push(ix,o[bk]);});if(v.length)b.push([PK.indexOf(pid),v]);}
   const q=[];for(const pid in G.buildQ){const z=G.buildQ[pid];
     q.push([PK.indexOf(pid),z.b===ANNEX_KEY?-1:BI(z.b),z.left]);}
   const w=[];for(const pid in G.train){const z=G.train[pid];
-    if(z&&z.length)w.push([PK.indexOf(pid),z.map(y=>[UI(y.t),y.left])]);}
+    if(z&&z.length)w.push([PK.indexOf(pid),z.map(y2=>[UI(y2.t),y2.left])]);}
   const x=[];for(const pid in G.occ)if(G.occ[pid])x.push([PK.indexOf(pid),G.occ[pid]]);
   const y=[];for(const pid in G.annex)if(G.annex[pid])y.push([PK.indexOf(pid),EI(G.annex[pid])]);
   const rc=[];for(const pid in (G.rec||{}))if(G.rec[pid])rc.push([PK.indexOf(pid),G.rec[pid]]);
-  return {v:6,t:G.turn,p:EI(G.player),df:G.diff||'norm',o:G.over?1:0,r:G.res||0,
+  [b,q,w,x,y,rc].forEach(pdelta);
+  return {v:7,t:G.turn,p:EI(G.player),df:G.diff||'norm',o:G.over?1:0,r:G.res||0,
           c,a,n,e,i,b,q,w,x,y,rc,
           l:(G.log||[]).slice(-SAVE_LOG_LINES).map(z=>[z.msg,z.cls||''])};
 }
@@ -2558,8 +2814,13 @@ function unpackSave(S){
   String(S.c||'').split(',').filter(Boolean).forEach(seg=>{
     const owner=EN(parseInt(seg[0],36)), len=parseInt(seg.slice(1),36);
     for(let k=0;k<len;k++){const id=CK[at++];if(id)g.cellOwner[id]=owner;}});
+  // v7 delta-encodes the cell index and trims trailing defaults. v6 codes wrote absolute indexes,
+  // so keep reading those unchanged: a save code someone already holds must never stop working.
+  const dlt=(S.v||6)>=7;
+  let acc=0;
   (S.a||[]).forEach(r=>{
-    const cid=CK[r[0]];if(!cid)return;
+    const ix=dlt?(acc+=r[0]):r[0];
+    const cid=CK[ix];if(!cid)return;
     const u={};for(let k=0;k<r[2].length;k+=2)u[UN(r[2][k])]=r[2][k+1];
     const o={e:EN(r[1]),u,mv:r[3]||0,w:r[4]||0};
     if(r[5]>=0)o.ord=CK[r[5]];
@@ -2567,27 +2828,65 @@ function unpackSave(S){
     if(r[8]>=0)o.siege=CK[r[8]];
     if(r[9]&&r[9].length){o.d={};for(let k=0;k<r[9].length;k+=2)o.d[UN(r[9][k])]=r[9][k+1]/100;}
     g.armies[cid]=o;});
-  (S.n||[]).forEach(r=>{const sid=SK[r[0]];if(!sid)return;
+  let sacc=0;
+  (S.n||[]).forEach(r=>{const six=dlt?(sacc+=r[0]):r[0];const sid=SK[six];if(!sid)return;
     let load=null;
     if(r[4]&&r[4].length){load={};for(let k=0;k<r[4].length;k+=2)load[UN(r[4][k])]=r[4][k+1];}
     g.navy[sid]={e:EN(r[1]),n:r[2],mv:r[3]||0,load};});
   (S.e||[]).forEach(r=>{g.emp[EN(r[0])]={key:EN(r[0]),gold:r[1],alive:!!r[2],ai:!!r[3],pers:r[4],
     tech:{blades:r[5],fletch:r[6],horse:r[7],siege:r[8],sea:r[9]},lastResearch:r[10]||0};});
   (S.i||[]).forEach(r=>{g.dip[dipKey(EN(r[0]),EN(r[1]))]={state:r[2]?'war':'peace',rel:r[3],truce:r[4],since:r[5]};});
-  (S.b||[]).forEach(r=>{const pid=PK[r[0]];if(!pid)return;const o={};
+  // v7 delta-encodes these province keys too; v6 wrote them absolute. undel() reads either.
+  const undel=list=>{let acc=0;return (list||[]).map(r=>{const c=r.slice();c[0]=dlt?(acc+=r[0]):r[0];return c;});};
+  undel(S.b).forEach(r=>{const pid=PK[r[0]];if(!pid)return;const o={};
     for(let k=0;k<r[1].length;k+=2)o[BN(r[1][k])]=r[1][k+1];g.bld[pid]=o;});
-  (S.q||[]).forEach(r=>{const pid=PK[r[0]];if(!pid)return;
+  undel(S.q).forEach(r=>{const pid=PK[r[0]];if(!pid)return;
     g.buildQ[pid]={b:r[1]===-1?ANNEX_KEY:BN(r[1]),left:r[2]};});
-  (S.w||[]).forEach(r=>{const pid=PK[r[0]];if(!pid)return;
+  undel(S.w).forEach(r=>{const pid=PK[r[0]];if(!pid)return;
     g.train[pid]=r[1].map(y=>({t:UN(y[0]),left:y[1]}));});
-  (S.x||[]).forEach(r=>{const pid=PK[r[0]];if(pid)g.occ[pid]=r[1];});
-  (S.y||[]).forEach(r=>{const pid=PK[r[0]];if(pid)g.annex[pid]=EN(r[1]);});
-  (S.rc||[]).forEach(r=>{const pid=PK[r[0]];if(pid)g.rec[pid]=r[1];});
+  undel(S.x).forEach(r=>{const pid=PK[r[0]];if(pid)g.occ[pid]=r[1];});
+  undel(S.y).forEach(r=>{const pid=PK[r[0]];if(pid)g.annex[pid]=EN(r[1]);});
+  undel(S.rc).forEach(r=>{const pid=PK[r[0]];if(pid)g.rec[pid]=r[1];});
   return g;
 }
 const b64enc=bytes=>{let s='';bytes.forEach(c=>s+=String.fromCharCode(c));return btoa(s);};
 const b64dec=str=>{const bin=atob(str);const out=new Uint8Array(bin.length);
   for(let k=0;k<bin.length;k++)out[k]=bin.charCodeAt(k);return out;};
+// v5.6k (#10): base64 spends 4 characters on every 3 bytes, so a quarter of the code is padding
+// that carries no information. basE91 packs about 6.5 bits into each character instead of 6, which
+// is roughly 7% off the whole string for free. The standard basE91 alphabet contains a double
+// quote; this one swaps it for '-' so a code can be pasted into an HTML attribute, a URL or a chat
+// message without anything mangling it. Encoder and decoder are both ours, so the swap is safe.
+const B91='ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$%&()*+,./:;<=>?@[]^_`{|}~-';
+const B91R=(()=>{const m={};for(let i=0;i<B91.length;i++)m[B91[i]]=i;return m;})();
+function b91enc(bytes){
+  let out='',b=0,n=0;
+  for(let i=0;i<bytes.length;i++){
+    b|=bytes[i]<<n; n+=8;
+    if(n>13){
+      let v=b&8191;
+      if(v>88){b>>=13;n-=13;}else{v=b&16383;b>>=14;n-=14;}
+      out+=B91[v%91]+B91[(v/91)|0];
+    }
+  }
+  if(n){out+=B91[b%91];if(n>7||b>90)out+=B91[(b/91)|0];}
+  return out;
+}
+function b91dec(str){
+  const out=[];let b=0,n=0,v=-1;
+  for(let i=0;i<str.length;i++){
+    const c=B91R[str[i]];
+    if(c===undefined)continue;
+    if(v<0)v=c;
+    else{
+      v+=c*91; b|=v<<n; n+=(v&8191)>88?13:14;
+      while(n>7){out.push(b&255);b>>=8;n-=8;}
+      v=-1;
+    }
+  }
+  if(v+1)out.push((b|v<<n)&255);
+  return new Uint8Array(out);
+}
 async function makeSaveCode(){
   const json=JSON.stringify(packSave());
   if(typeof CompressionStream==='undefined')return SAVE_TAG_RAW+btoa(unescape(encodeURIComponent(json)));
@@ -2595,13 +2894,20 @@ async function makeSaveCode(){
     const cs=new CompressionStream('deflate-raw');
     const wr=cs.writable.getWriter();wr.write(new TextEncoder().encode(json));wr.close();
     const buf=new Uint8Array(await new Response(cs.readable).arrayBuffer());
-    return SAVE_TAG+b64enc(buf);
+    return SAVE_TAG9+b91enc(buf);
   }catch(err){return SAVE_TAG_RAW+btoa(unescape(encodeURIComponent(json)));}
 }
 async function readSaveCode(txt){
   txt=(txt||'').trim().replace(/\s+/g,'');
   if(txt.indexOf(SAVE_TAG_RAW)===0)
     return unpackSave(JSON.parse(decodeURIComponent(escape(atob(txt.slice(SAVE_TAG_RAW.length))))));
+  // v5.6k: the basE91 code. Older AOC6- codes fall through to the branch below and still load.
+  if(txt.indexOf(SAVE_TAG9)===0){
+    const ds=new DecompressionStream('deflate-raw');
+    const wr=ds.writable.getWriter();wr.write(b91dec(txt.slice(SAVE_TAG9.length)));wr.close();
+    const out=await new Response(ds.readable).arrayBuffer();
+    return unpackSave(JSON.parse(new TextDecoder().decode(out)));
+  }
   if(txt.indexOf(SAVE_TAG)===0){
     const ds=new DecompressionStream('deflate-raw');
     const wr=ds.writable.getWriter();wr.write(b64dec(txt.slice(SAVE_TAG.length)));wr.close();
@@ -2618,9 +2924,16 @@ function exportSave(){
   makeSaveCode().then(code=>{
     showModal('Save code',
       '<div class="meta">Copy this code, then paste it into Import save code on the start screen of any device.</div>'+
-      '<textarea id="expT" readonly style="width:100%;height:130px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:10px;font-family:monospace">'+code+'</textarea>'+
+      // v5.6k: the code used to be concatenated straight into this markup. A textarea is RCDATA,
+      // so the parser still resolves character references inside it — an '&' in the code would be
+      // read as the start of an entity and the copied text would no longer be the save. base64
+      // never produced '&', basE91 does. Set .value in script instead, where no parsing happens.
+      '<textarea id="expT" readonly style="width:100%;height:130px;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:6px;font-size:10px;font-family:monospace"></textarea>'+
       '<div class="meta" style="text-align:center">'+code.length.toLocaleString()+' characters</div>',
-      [['Copy code',()=>{const t=$('expT');t.select();try{document.execCommand('copy');}catch(e){}},''],['Close',closeModal,'primary']]);
+      [['Copy code',()=>{const t=$('expT');t.select();t.setSelectionRange(0,code.length);
+        if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(code).then(()=>toast('Save code copied.'),()=>{try{document.execCommand('copy');}catch(e){}});}
+        else{try{document.execCommand('copy');toast('Save code copied.');}catch(e){}}},''],['Close',closeModal,'primary']]);
+    const ta=$('expT');if(ta)ta.value=code;
   });
 }
 function importSave(){
@@ -2715,6 +3028,13 @@ function updateMap(){
     const co=cellOwnerOf(cid);
     el.setAttribute('fill',tint(co));
     el.classList.toggle('target',!!targets[cid]);
+    // v5.6m: say how long it takes to get there, the turn-based read of CoN's arrival tooltip.
+    if(G.mode&&G.selArmy){
+      const t=targets[cid]
+        ? (targets[cid].icept?'Strike this column now':(G.mode==='attack'?'Attack this turn':'Arrives this turn'))
+        : null;
+      if(t)el.setAttribute('data-eta',t); else el.removeAttribute('data-eta');
+    }else el.removeAttribute('data-eta');
     el.classList.toggle('icept',!!(targets[cid]&&targets[cid].icept));
     el.classList.toggle('occupied',occupiedCell(cid));
     el.classList.toggle('atwar',co!=='neutral'&&co!==G.player&&atWar(G.player,co));
@@ -2999,11 +3319,15 @@ function armyClick(cid){
   // Note there is deliberately no G.marchInfo test here. computeMarch leaves it null once an army
   // has spent its movement, and an army that cannot march this turn is exactly the one whose
   // player most wants to open the border now and set a standing order.
+  // v5.6m: this used to key off G.targeting, which armyClick set on every selection. Now that
+  // selecting no longer arms anything, that test was always false and the v5.6j fix for #6 was
+  // silently dead. Key off G.mode instead: pressing Move or Attack IS the statement of intent,
+  // and a bare tap on an enemy stack should still just show you what little you can see.
   const _t=G.armies[cid];
-  if(G.targeting&&G.selArmy&&G.selArmy!==cid&&_t&&_t.e!==G.player&&!hostileTo(G.player,_t.e)){
+  if(G.mode&&G.selArmy&&G.selArmy!==cid&&_t&&_t.e!==G.player&&!hostileTo(G.player,_t.e)){
     const foeE=_t.e;
     offerWar(foeE,'Their armies cannot be struck until war is declared.',()=>{
-      G.targeting=true;computeMarch();renderAll();
+      armMode('attack');            // war declared from an army tap: go straight back to striking
       toast('War declared on '+empName(foeE)+'. Their lands are open.');
     });
     return;
@@ -3012,10 +3336,13 @@ function armyClick(cid){
   if(G.selArmy!==cid){G.send={};G.forced=false;}
   G.selArmy=cid;
   const mine=G.armies[cid]&&G.armies[cid].e===G.player;
-  G.targeting=!!mine;                 // auto-arm: pick your army, then click a target directly
-  if(mine)computeMarch();
+  // v5.6m: selecting an army no longer arms it. Nabeel chose the full CoN flow, so you press
+  // Move or Attack and only the cells legal for that intent light up. The buttons appear right
+  // above the card the moment you select, so the next step is never hidden.
+  G.mode=null;G.targeting=false;G.moreOpen=false;
+  if(mine)setSendAllSafe(1);          // a fresh selection sends the whole stack until you split
   if(mine&&forceRange(G.armies[cid],G.armies[cid].u)<=0&&!G.armies[cid].ord&&!G.armies[cid].siege)
-    toast('This army has no movement left this turn &mdash; click a distant cell to set a march order for next turn.');
+    toast('This army has no movement left this turn &mdash; press <b>Move</b> and tap a distant cell to set a march order for next turn.');
   renderAll();
   openArmyPanel(cid);
 }
@@ -3028,8 +3355,9 @@ function cityClick(pid){
   if(G.selCity!==pid){G.send={};G.forced=false;}
   G.selArmy=(gar&&gar.e===G.player)?cc:null;
   G.selCity=pid;
-  G.targeting=!!G.selArmy;
-  if(G.selArmy)computeMarch();
+  // v5.6m: same rule as armyClick. Selecting never arms; Move or Attack does.
+  G.mode=null;G.targeting=false;G.moreOpen=false;
+  if(G.selArmy)setSendAllSafe(1);
   renderAll();
   openCityPanel(pid);
 }
@@ -3050,8 +3378,8 @@ function cellClick(cid){
       showModal('Declare war on '+nm+'?',
         '<div class="meta">You are at peace with '+nm+'. Their borders are sealed &mdash; your armies cannot enter or strike until war is declared.</div>'+
         '<div class="meta">War costs no gold, but every other crown will note your appetite for conquest.</div>',
-        [['Declare war',()=>{closeModal();declareWar(G.player,peaceBlock);G.targeting=true;computeMarch();renderAll();saveGame();toast('War declared on '+nm+'. Their lands are open — choose your target.');},'primary'],
-         ['Keep the peace',()=>{closeModal();G.targeting=false;G.marchInfo=null;renderAll();},'']]);
+        [['Declare war',()=>{closeModal();declareWar(G.player,peaceBlock);saveGame();armMode(G.mode||'move');toast('War declared on '+nm+'. Their lands are open — choose your target.');},'primary'],
+         ['Keep the peace',()=>{closeModal();clearMode();},'']]);
       return;
     }
     if(a){
@@ -3060,7 +3388,12 @@ function cellClick(cid){
         delete a.siege;                       // any new order breaks a siege
         a.ord=cid;
         G.targeting=false;G.marchInfo=null;
-        if(hostile)toast('March order set &mdash; the army will halt beside the enemy at <b>'+(destCell.city?provOf(destCell.p).city:'the target')+'</b>; order the attack when it arrives.');
+        // v5.6m: tell them how long it takes, the turn equivalent of CoN's arrival tooltip.
+        const eta=etaToCell(G.selArmy,cid);
+        const where=destCell.city?provOf(destCell.p).city:'the target';
+        const when=eta?' &middot; arrives in <b>'+eta+' turn'+(eta>1?'s':'')+'</b>':'';
+        if(hostile)toast('March order set &mdash; the army halts beside the enemy at <b>'+where+'</b>'+when+'; order the attack when it arrives.');
+        else toast('Marching to <b>'+where+'</b>'+when+'.');
         advanceOrders(G.player);
         const cur=Object.keys(G.armies).find(k=>G.armies[k]===a)||G.selArmy;
         G.selArmy=(G.armies[cur]&&G.armies[cur].e===G.player)?cur:null;
@@ -3095,8 +3428,8 @@ function cellClick(cid){
     showModal('Declare war on '+nm+'?',
       '<div class="meta">You are at peace with '+nm+'. Their armies and cities cannot be touched until war is declared.</div>'+
       '<div class="meta">Declaring war costs nothing in gold, but every other crown will note your appetite for conquest (their opinion of you drops).</div>',
-      [['Declare war',()=>{closeModal();declareWar(G.player,blocker);G.targeting=true;computeMarch();renderAll();toast('War declared on '+nm+'. Choose your target again.');},'primary'],
-       ['Keep the peace',()=>{closeModal();G.targeting=false;G.marchInfo=null;renderAll();},'']]);
+      [['Declare war',()=>{closeModal();declareWar(G.player,blocker);armMode(G.mode||'attack');toast('War declared on '+nm+'. Choose your target again.');},'primary'],
+       ['Keep the peace',()=>{closeModal();clearMode();},'']]);
     return;
   }
   if(tg.icept){
@@ -3184,6 +3517,10 @@ function doMarch(from,cid,want,forced){
         :(r.rep.held
           ?'<span style="color:var(--gold)">Both lines held.</span> Your army fell back wounded.<br>You lost '+r.rep.attLost+'; the enemy lost '+r.rep.defLost+'. Wounds heal each turn — press the attack or regroup.'
           :'<span class="bad">Defeat. Your assault was broken.</span><br>You lost '+r.rep.attLost+'; the enemy lost '+r.rep.defLost+'.');
+      // v5.6k: the fog lifts here and only here. You paid to find out what they were made of.
+      if(r.rep.defWas&&cnt(r.rep.defWas)){
+        b+='<div class="meta" style="margin-top:8px">You faced: '+armyStr(r.rep.defWas)+'.</div>';
+      }
       if(!G.over)showModal(r.rep.win?'Victory':(r.rep.held?'Stalemate':'Repelled'),b,[['Continue',closeModal,'primary']]);
     }
     if(G.selArmy)openArmyPanel(G.selArmy);
@@ -3201,18 +3538,19 @@ function openArmyPanel(cid){
   const c=cellOf(cid);
   const pv=provOf(c.p);
   let h='<div class="meta">Near '+pv.city+' ('+empName(ownerOf(c.p))+' land)'+(a.w?' &middot; <span style="color:var(--danger)">winded</span>':'')+'</div>';
-  h+='<table class="utable">';
-  UKEYS.forEach(t=>{
-    if(!a.u[t])return;
-    const pool=a.u[t]*UNITS[t].hp;
-    const pct=Math.round(100*(pool-Math.min((a.d&&a.d[t])||0,pool))/pool);
-    h+='<tr><td>'+uicon(t)+UNITS[t].name+'</td><td>'+a.u[t]+(pct<100?' <span style="color:'+(pct<50?'#c94040':'#c9a227')+'">'+pct+'%</span>':'')+'</td></tr>';
-  });
-  h+='<tr><td><b>Total</b></td><td><b>'+cnt(a.u)+'</b></td></tr></table>';
+  // v5.6k: this used to print the enemy's complete order of battle and an exact total, which made
+  // the map fog pointless — you simply tapped the stack to read it. Land now reports the same way
+  // an enemy garrison always has: a strength band, no numbers, no composition.
+  const bnd=garrisonBand(cnt(a.u));
+  h+='<div class="meta" style="font-size:15px">Strength: <b style="color:'+bnd.cls+'">'+bnd.txt+'</b> '+
+     '<span style="color:'+bnd.cls+';letter-spacing:2px">'+bandGlyph(cnt(a.u))+'</span></div>';
+  h+='<div class="meta">Your scouts can judge the size of a force, not its make-up. You will learn what it is built from when you fight it.</div>';
   $('panel').innerHTML=h;
   showDrawer(empName(a.e)+' army');
 }
 function setCityTab(tab){G.cityTab=tab;if(G.selCity)openCityPanel(G.selCity);}
+function setRecDom(k){G.recDom=k;G.recSub=null;if(G.selCity)openCityPanel(G.selCity);}
+function setRecSub(k){G.recSub=k;if(G.selCity)openCityPanel(G.selCity);}
 function openCityPanel(pid){
   const pv=provOf(pid);
   const own=ownerOf(pid);
@@ -3265,34 +3603,67 @@ function openCityPanel(pid){
     const capped=rc>=RECRUIT_CAP;
     const capT=RECRUIT_CAP+2*bldLv(pid,'granary');
     const cappedT=rc>=capT;
-    h+='<h3 style="font-size:14px">Recruit</h3>';
-    if(isPort(pid)){                          // players look for ships under Recruit, not Overview
+    // The tabs go FIRST. In the CoN screen they sit directly under the city name; two paragraphs
+    // of explanation above them pushed them halfway down a phone screen.
+    // v5.6k (#5), matching the CoN reference: TYPE on the first row, SUB-TYPE on the second.
+    let dom=REC_DOMAINS.find(d=>d.k===G.recDom)||REC_DOMAINS[0];
+    if(dom.k==='sea'&&!isPort(pid))dom=REC_DOMAINS[0];        // no harbour, no sea tab
+    h+='<div class="stabs tier1">';
+    REC_DOMAINS.forEach(d=>{
+      if(d.k==='sea'&&!isPort(pid))return;
+      h+='<button class="'+(dom.k===d.k?'on':'')+'" onclick="setRecDom(\''+d.k+'\')">'+uicon(d.icon)+' '+d.name+'</button>';
+    });
+    h+='</div>';
+    let sub=dom.subs.find(s=>s.k===G.recSub)||dom.subs[0];
+    h+='<div class="stabs tier2">';
+    dom.subs.forEach(s=>{
+      const n=s.tracks.reduce((a,tk)=>a+UKEYS.filter(t=>UNITS[t].track===tk&&canRecruit(pid,t)).length,0);
+      h+='<button class="'+(sub.k===s.k?'on':'')+'" onclick="setRecSub(\''+s.k+'\')">'+s.name+(s.tracks.length?' '+n:'')+'</button>';
+    });
+    h+='</div>';
+    h+='<div class="meta" style="margin-top:2px">Mustered this turn: <b>'+rc+'/'+capT+'</b>'+(cappedT?' &mdash; the muster is full until next turn':'')+'</div>';
+    const tq=queueOf(pid);
+    if(tq.length){
+      h+='<div class="bsec">In training</div>';
+      tq.forEach((q,i)=>{
+        h+='<div class="brow2"><div class="bic">'+artSvg(q.t,34,empColor(G.player))+'</div>'+
+           '<div class="bmid"><div class="bnm">'+UNITS[q.t].name+'</div>'+
+           '<div class="bcost"><span class="ci">&#9203; '+q.left+' turn'+(q.left>1?'s':'')+' left</span></div></div>'+
+           '<div class="bact"><button onclick="cancelTrain(\''+pid+'\','+i+')">Cancel</button></div></div>';
+      });
+    }
+    if(dom.k==='sea'){
       const blockaded=!portCellsFree(pid,G.player).length;
       h+='<div class="buildrow"><span>'+uicon('ship')+'<b>'+SHIP.name+'</b> &mdash; '+SHIP.cost+'g<br><span style="color:var(--muted);font-size:11.5px">'+
          (blockaded?'An enemy fleet blockades this harbour.':'Sails from this harbour &middot; carries '+SHIP_CAPACITY+' troops')+'</span></span>'+
          '<button '+((e.gold<SHIP.cost||blockaded)?'disabled':'')+' onclick="buyShip(\''+pid+'\')">Buy</button></div>';
-    }
-    h+='<div class="meta" style="font-size:11px">Each unit lists <b>dmg</b> (damage it deals each round), <b>hp</b> (damage it can absorb) and <b>armour</b> (subtracted from every hit it takes).</div>';
-    h+='<div class="meta">Mustered this turn: '+rc+'/'+capT+(cappedT?' &mdash; the muster is full until next turn':'')+' &middot; training takes 1 turn (tier 1), 2 (tier 2), 3 (tier 3)</div>';
-    const tq=queueOf(pid);
-    if(tq.length){
-      h+='<div class="meta" style="color:var(--gold)">In training:</div>';
-      tq.forEach((q,i)=>{
-        h+='<div class="buildrow"><span>'+uicon(q.t)+UNITS[q.t].name+' &mdash; '+q.left+' turn'+(q.left>1?'s':'')+' left</span><button onclick="cancelTrain(\''+pid+'\','+i+')">Cancel</button></div>';
-      });
-    }
-    for(const tk in TRACKS){                    // one row per trainable unit here, grouped by track; next tier shown as a locked hint
-      const tiers=UKEYS.filter(t=>UNITS[t].track===tk).sort((a,b)=>UNITS[a].tier-UNITS[b].tier);
+    }else{
+      const bt=[];sub.tracks.forEach(tk=>TRACKS[tk].beats.forEach(x=>{if(!bt.includes(x))bt.push(x);}));
+      h+='<div class="meta" style="font-size:11.5px">Beats <b>'+bt.map(x=>TRACKS[x].name).join(', ')+'</b>.</div>';
       let nextLock=null;
-      tiers.forEach(t=>{
-        const u=UNITS[t];
-        if(canRecruit(pid,t)){
-          h+='<div class="buildrow"><span>'+uicon(t)+u.name+' &mdash; '+u.cost+'g <span style="opacity:0.7">'+u.dmg+' dmg &middot; '+u.hp+' hp &middot; '+(u.armor?u.armor+' armour':'no armour')+(u.ap?' &middot; <span style="color:#e08a3c">pierces armour</span>':'')+(u.beatsAlso?' &middot; <span style="color:#e08a3c">beats horse</span>':'')+'</span></span><button '+((e.gold<u.cost||cappedT)?'disabled':'')+' onclick="buyUnit5(\''+pid+'\',\''+t+'\')">Buy</button></div>';
-        }else if(!nextLock){
-          nextLock='<div class="meta" style="padding-left:4px">&#128274; '+u.name+' &mdash; needs '+recruitGateText(pid,t)+'</div>';
-        }
+      sub.tracks.forEach(tk=>{
+        UKEYS.filter(t=>UNITS[t].track===tk).sort((a,b)=>UNITS[a].tier-UNITS[b].tier).forEach(t=>{
+          const u=UNITS[t];
+          if(canRecruit(pid,t)){
+            // same card as a building row: art, tier badge, name, costs, what it does, action
+            h+='<div class="brow2"><div class="bic">'+artSvg(t,34,empColor(G.player))+'<span class="blv on">'+u.tier+'</span></div>';
+            h+='<div class="bmid"><div class="bnm">'+u.name+'</div>';
+            h+='<div class="bcost"><span class="ci">&#128176; '+u.cost+'</span><span class="ci">&#9876; '+u.dmg+'</span>'+
+               '<span class="ci">&#10084; '+u.hp+'</span><span class="ci">&#128737; '+(u.armor||0)+'</span></div>';
+            const tags=[];
+            if(u.ap)tags.push('pierces armour');
+            if(u.beatsAlso)tags.push('beats horse');
+            if(TRACKS[u.track].ranged)tags.push('volleys first');
+            h+='<div class="bds">'+(tags.length?tags.join(' &middot; '):'&nbsp;')+'</div></div>';
+            h+='<div class="bact"><button class="'+((e.gold>=u.cost&&!cappedT)?'primary':'')+'" '+((e.gold<u.cost||cappedT)?'disabled':'')+
+               ' onclick="buyUnit5(\''+pid+'\',\''+t+'\')">Recruit</button></div></div>';
+          }else if(!nextLock){
+            nextLock='<div class="meta" style="padding-left:4px">&#128274; '+u.name+' &mdash; needs '+recruitGateText(pid,t)+'</div>';
+          }
+        });
       });
       if(nextLock)h+=nextLock;
+      h+='<div class="meta" style="font-size:10.5px;margin-top:8px;opacity:.8">&#128176; gold &middot; &#9876; damage each round &middot; &#10084; damage it can absorb &middot; &#128737; armour, subtracted from every hit. Training takes 1 turn at tier 1, 2 at tier 2, 3 at tier 3.</div>';
     }
   }
   if(mine&&!G.over&&tab==='bld'){
@@ -3313,74 +3684,238 @@ function openCityPanel(pid){
       if(!isHomeCity(pid,G.player))h+='<div class="meta"><span style="color:var(--gold)">Annexed city</span> &mdash; it builds as your homeland does.</div>';
       if(q&&q.b===ANNEX_KEY)h+='<div class="meta">&#127983; Annexation under way &mdash; complete in '+q.left+' turn'+(q.left>1?'s':'')+'.</div>';
       else if(q)h+='<div class="meta">&#128296; '+BLD[q.b].name+' &mdash; ready in '+q.left+' turn'+(q.left>1?'s':'')+'.</div>';
-      BKEYS.forEach(b=>{
-        const lv=bldLv(pid,b);
-        const maxed=lv>=BLD[b].max;
-        const cost=maxed?null:BLD[b].cost[lv];
-        h+='<div class="buildrow" style="align-items:flex-start"><span title="'+BLD[b].desc+'"><b>'+BLD[b].name+' '+(lv?'L'+lv:'')+(maxed?' (max)':'')+'</b><br><span style="color:var(--muted);font-size:11.5px">'+BLD[b].desc+'</span></span>';
-        if(!maxed)h+='<button '+((e.gold<cost||q)?'disabled':'')+' onclick="doBuild(\''+pid+'\',\''+b+'\')">'+(lv?'Upgrade':'Build')+' '+cost+'g</button>';
-        h+='</div>';
+      // v5.6k (#2): "Building screen needs more button like feel rather than text" and "need proper
+      // section for each building". Each building is now a tile you press, with level pips so you
+      // can see what you already have without reading, grouped under named sections.
+      BLD_SECTIONS.forEach(sec=>{
+        const keys=sec.keys.filter(b=>BLD[b]);
+        if(!keys.length)return;
+        // Laid out like the CoN city screen Nabeel circled: a big icon with a level badge on the
+        // left, name and costs and build time in the middle, the action button on the right, each
+        // one inside corner brackets. My first attempt was a 2-up grid of small tiles, which is
+        // not what that screen does.
+        h+='<div class="bsec">'+sec.name+'</div>';
+        keys.forEach(b=>{
+          const B=BLD[b];
+          const lv=bldLv(pid,b);
+          const maxed=lv>=B.max;
+          const cost=maxed?null:B.cost[lv];
+          const busy=!!q;
+          h+='<div class="brow2'+(maxed?' maxed':'')+'">';
+          h+='<div class="bic">'+artSvg(B.icon,34,empColor(G.player))+
+             '<span class="blv'+(lv?' on':'')+'">'+lv+'</span></div>';
+          h+='<div class="bmid"><div class="bnm">'+B.name+'</div>';
+          h+='<div class="bcost">'+(maxed?'<span class="bmax">&#10003; Fully built</span>'
+             :'<span class="ci">&#128176; '+cost+'</span><span class="ci">&#9203; '+B.turns+' turn'+(B.turns>1?'s':'')+'</span>')+'</div>';
+          h+='<div class="bds">'+B.desc+'</div></div>';
+          h+='<div class="bact">';
+          if(maxed)h+='<span class="bdone">MAX</span>';
+          else h+='<button class="'+((e.gold>=cost&&!busy)?'primary':'')+'" '+((e.gold<cost||busy)?'disabled':'')+
+                  ' onclick="doBuild(\''+pid+'\',\''+b+'\')"><span class="bb1">'+(lv?'Upgrade':'Build')+'</span></button>';
+          h+='</div></div>';
+        });
       });
-      h+='<div class="meta">One project per city &middot; '+BLD.barracks.turns+' turns each.</div>';
+      h+='<div class="meta" style="margin-top:8px">One project per city &middot; '+BLD.barracks.turns+' turns each.</div>';
     }
   }
   $('panel').innerHTML=h;
   showDrawer((pv.cap?'&#9733; ':'')+pv.city);
 }
+// ================= v5.6m: the CoN division card =================
+// The recording settled the shape. The card holds NO controls: a name banner, one stat strip, a
+// row of unit chips. Buttons float above it in two rows; per-unit numbers live in the Split
+// dialog. That is the whole reason CoN's card is a tenth of the screen and mine was 43%.
+function armyCondition(a){                 // one percentage for "how chewed up is this stack"
+  let pool=0,lost=0;
+  for(const t in a.u){const n=a.u[t];if(!n)continue;
+    const cap=n*UNITS[t].hp; pool+=cap; lost+=Math.min((a.d&&a.d[t])||0,cap);}
+  return pool?Math.round(100*(pool-lost)/pool):100;
+}
+function armyMaxTroops(a){                 // headcount is already the max; wounds are tracked apart
+  return cnt(a.u);
+}
 function renderBar(){
-  const bar=$('abar');
-  if(!bar)return;
-  if(!G||!G.selArmy||G.over){bar.classList.remove('show');return;}
+  const bar=$('abar'), act=$('actbar');
+  const hide=()=>{if(bar)bar.classList.remove('show');if(act)act.classList.remove('show');
+    const mb=$('modebar');if(mb)mb.classList.remove('show');};
+  if(!bar||!act)return;
+  if(!G||!G.selArmy||G.over){hide();return;}
   const a=G.armies[G.selArmy];
-  if(!a||a.e!==G.player){bar.classList.remove('show');return;}
+  if(!a||a.e!==G.player){hide();return;}
   const tot=cnt(a.u);
-  if(!tot){bar.classList.remove('show');return;}
+  if(!tot){hide();return;}
   if(!G.send)G.send={};
   const col=empColor(G.player);
-  const wsel={};UKEYS.forEach(t=>{
-    const n=a.u[t]||0;
-    if(n&&(G.send[t]===undefined||G.send[t]>n))G.send[t]=n;
-    wsel[t]=Math.max(0,Math.min((G.send[t]||0),n));
-  });
-  const sending=cnt(wsel);
-  const rng=forceRange(a,wsel)+(G.forced?2:0);
-  const status=a.w?'Winded':(forceRange(a,a.u)<=0?'Marched':'Ready');
-  const stCls=status==='Ready'?'ok':(status==='Winded'?'bad':'');
+  const cell=cellOf(G.selArmy);
+  const pv=provOf(cell.p);
+  const onCity=!!cell.city;
+  const marching=onTheMarch(a);
+  const rng=forceRange(a,a.u)+(G.forced?2:0);
+  const cond=armyCondition(a);
   const str=Math.round(strength(a.u,{},false,false,G.player));
-  const pv=provOf(cellOf(G.selArmy).p);
-  const onCity=!!cellOf(G.selArmy).city;
-  let h='<div class="dcHead"><span class="crest" style="background:'+col+'"></span>';
-  h+='<div class="dcT"><div class="dcTitle">'+(onCity?'Garrison of ':'Army near ')+pv.city+'</div><div class="dcSub">'+empName(G.player)+' &middot; '+tot+' troops</div></div>';
-  h+='<span class="pill '+stCls+'">'+status+'</span><span class="pill">Range '+rng+'</span></div>';
-  h+='<div class="dcBody"><div class="dcTop">';
-  h+='<div class="dcSum"><div class="lb">TROOPS</div><div class="vl">'+tot+'</div><div class="lb">STRENGTH</div><div class="vl">~'+str+'</div><div class="lb">SENDING</div><div class="vl gold">'+sending+'/'+tot+'</div></div>';
-  h+='<div class="dcTiles">';
+
+  // ---- banner ----
+  let h='<div class="dcBanner"><span class="dcFlag" style="--fc:'+col+'"></span>';
+  let line2;
+  if(a.siege){
+    const sgar=G.armies[a.siege];
+    const sb=garrisonBand(sgar?cnt(sgar.u):0);
+    line2='&#9876; Besieging '+provOf(cellOf(a.siege).p).city+' &middot; garrison <span style="color:'+sb.cls+'">'+sb.txt+'</span>';
+  }else if(a.ord){
+    const eta=orderEtaTurns(G.selArmy);
+    line2='&#8674; Marching to '+provOf(cellOf(a.ord).p).city+(eta?' &middot; arrives in '+eta+' turn'+(eta>1?'s':''):'');
+  }else if(marching){
+    line2='&#8674; On the road &middot; strung out until it halts';
+  }else{
+    line2=empName(G.player)+' &middot; '+(onCity?'holding '+pv.city:'in the field near '+pv.city);
+  }
+  h+='<div class="dcName"><div class="n1">'+(onCity?'Garrison of '+pv.city:'Army near '+pv.city)+'</div>'+
+     '<div class="n2">'+line2+'</div></div>';
+  h+='<button class="dcInfo" onclick="showArmyInfo()" title="What these figures mean">i</button></div>';
+
+  // ---- stat strip: troops, condition, move, strength, plus the walls bonus when it applies ----
+  const wall=onCity&&ownerOf(cell.p)===G.player?bldLv(cell.p,'walls'):0;
+  h+='<div class="dcStrip">';
+  h+='<span class="st"><i>&#128100;</i>'+tot+'/'+armyMaxTroops(a)+'</span>';
+  h+='<span class="st'+(cond<50?' bad':(cond<85?' warn':''))+'"><i>&#10084;</i>'+cond+'%</span>';
+  h+='<span class="st'+(rng<=0?' bad':'')+'"><i>&#187;</i>'+(Math.round(rng*10)/10)+'</span>';
+  h+='<span class="st"><i>&#9876;</i>~'+str+'</span>';
+  if(wall)h+='<span class="st"><i>&#127983;</i>+'+(wall*15)+'%</span>';
+  if(a.w)h+='<span class="st bad"><i>&#9888;</i>winded</span>';
+  h+='</div>';
+
+  // ---- unit chips ----
+  h+='<div class="dcChips">';
   UKEYS.forEach(t=>{
     const n=a.u[t]||0;
     if(!n)return;
     const pool=n*UNITS[t].hp;
-    const hpPct=Math.max(6,Math.round(100*(pool-Math.min((a.d&&a.d[t])||0,pool))/pool));
-    h+='<div class="tile">'+artSvg(t,42,col)+'<span class="tnm">'+UNITS[t].name+'</span><span class="tn">x'+n+'</span>';
-    h+='<div class="rbar" title="'+hpPct+'% strength"><div style="width:'+hpPct+'%'+(hpPct<50?';background:#c94040':(hpPct<85?';background:#c9a227':''))+'"></div></div>';
-    h+='<div class="tstep"><button onclick="bumpSend(\''+t+'\',-1)">&minus;</button><span>'+wsel[t]+'</span><button onclick="bumpSend(\''+t+'\',1)">+</button></div></div>';
+    const hp=Math.max(6,Math.round(100*(pool-Math.min((a.d&&a.d[t])||0,pool))/pool));
+    const hpCol=hp<50?'#c94040':(hp<85?'#c9a227':'#7ec97e');
+    let chev='';for(let i=1;i<UNITS[t].tier;i++)chev+='^';
+    h+='<div class="uchip" title="'+UNITS[t].name+' &times;'+n+'">'+
+       (chev?'<span class="chev">'+chev+'</span>':'')+
+       '<span class="dia"><span>'+artSvg(t,26,'#f5edd8')+'</span></span>'+
+       '<span class="cn">'+n+'</span>'+
+       '<span class="cb"><i style="width:'+hp+'%;background:'+hpCol+'"></i></span>'+
+       // One deviation from the reference: CoN's diamonds carry no label, but CoN shows a handful
+       // of unit types and this game has 22 across six tracks. Ten pixels of name is cheaper than
+       // making the player guess a silhouette. Easy to drop if it reads as clutter.
+       '<span class="cnm">'+UNITS[t].name+'</span></div>';
   });
-  h+='</div></div>';
-  h+='<div class="dcAct"><div><button onclick="setSendAll(1)">All</button><button onclick="setSendAll(0)">None</button></div>';
-  h+='<button '+(G.forced?'class="primary"':'')+' onclick="toggleForced()" title="+2 cells, arrive winded (-20% until next turn)">Forced march</button>';
-  h+='<div><button class="primary" onclick="startTargeting()">'+(G.targeting?'Click a target...':'Choose target')+'</button>'+
-     ((a.ord||onTheMarch(a))?'<button onclick="holdArmy(\''+G.selArmy+'\')" title="Stop here, holding the ground you have crossed">Hold</button>':'')+'</div></div>';
   h+='</div>';
-  if(a.siege){                          // CoN-style status rows inside the division card
-    const sgar=G.armies[a.siege];
-    h+='<div class="dcRow">&#9876; Besieging <b>'+provOf(cellOf(a.siege).p).city+'</b> &middot; garrison '+(sgar?cnt(sgar.u):0)+' starving &middot; moving lifts the siege<button onclick="doLiftSiege(\''+G.selArmy+'\')">Lift siege</button></div>';
-  }
-  if(a.ord){
-    const eta=orderEtaTurns(G.selArmy);
-    h+='<div class="dcRow">&#8674; Marching to <b>'+provOf(cellOf(a.ord).p).city+'</b>'+(eta?' &middot; arrives in '+eta+' turn'+(eta>1?'s':''):'')+'<button onclick="cancelOrder(\''+G.selArmy+'\')">Cancel</button></div>';
-  }
   bar.innerHTML=h;
   bar.classList.add('show');
+
+  // ---- the floating button rows ----
+  const mode=G.mode||null;
+  const canStop=!!(a.ord||a.siege||marching);
+  // Split is halted-only. An army mid-leg is there BECAUSE it spent its movement, so a force
+  // peeled off it could not leave the cell, and this game stores one army per cell.
+  const splitWhy=marching?'On the road with no movement left. Stop it first.'
+                :(tot<2?'Needs at least two units to divide.':'');
+  let ah='';
+  if(G.moreOpen){
+    ah+='<div class="arow">';
+    ah+=abtn('&#9880;','Split',"openSplit()",!!splitWhy,splitWhy);
+    ah+=abtn('&#187;','Forced',"toggleForced()",false,'+2 cells, arrives winded',G.forced?'on':'');
+    if(a.siege)ah+=abtn('&#9968;','Lift siege',"doLiftSiege('"+G.selArmy+"')",false,'Raise the siege and free the army');
+    ah+='</div>';
+  }
+  ah+='<div class="arow">';
+  ah+=abtn('&#8943;','More',"toggleMore()",false,'More orders',G.moreOpen?'on':'');
+  ah+=abtn('&#8856;','Stop',"stopArmy()",!canStop,canStop?'Halt here and drop the order':'Nothing to stop');
+  ah+=abtn('&#187;','Move',"armMode('move')",false,'March to a cell',mode==='move'?'go':'');
+  ah+=abtn('&#9876;','Attack',"armMode('attack')",false,'Strike an enemy',mode==='attack'?'hit':'');
+  ah+='</div>';
+  act.innerHTML=ah;
+  act.classList.add('show');
+  positionActBar();
+  renderModeBar();
 }
+function abtn(icon,label,fn,dis,tip,cls){
+  return '<button class="abtn '+(cls||'')+'" '+(dis?'disabled':'')+' title="'+(tip||'')+'"'+
+         (dis?'':' onclick="'+fn+'"')+'><span class="aic">'+icon+'</span>'+label+'</button>';
+}
+function positionActBar(){                 // sit the buttons directly above the card
+  const act=$('actbar'), bar=$('abar');
+  if(!act||!bar)return;
+  const bh=bar.getBoundingClientRect().height||0;
+  act.style.bottom=(bh+16)+'px';
+}
+function toggleMore(){G.moreOpen=!G.moreOpen;renderBar();}
+// ===== v5.6m: the Split dialog =====
+// The steppers used to be crammed into the card, one row per unit type, which is what made the
+// card fill the phone. They live here instead: a slider and a number per type, then Move or
+// Attack. Nabeel's rule is that a division that has not actually left simply merges back, and in
+// this game that is free: the split is only a SELECTION until you commit to a destination, so
+// closing this dialog separates nothing and there is never a second army sharing the cell.
+function openSplit(){
+  const a=G.armies[G.selArmy];
+  if(!a)return;
+  if(onTheMarch(a)){toast('An army on the road has no movement left to peel a force away. Stop it first.');return;}
+  G.send=G.send||{};
+  UKEYS.forEach(t=>{const n=a.u[t]||0;
+    G.send[t]=Math.max(0,Math.min(G.send[t]===undefined?n:G.send[t],n));});
+  drawSplit();
+  $('splitdlg').classList.add('show');
+}
+function closeSplit(){$('splitdlg').classList.remove('show');}
+function drawSplit(){
+  const dlg=$('splitdlg'), a=G.armies[G.selArmy];
+  if(!dlg||!a)return;
+  const col=empColor(G.player);
+  let h='<div class="spBox"><div class="spHead"><h3>Split army</h3>'+
+        '<button onclick="closeSplit()" title="Close">&times;</button></div>';
+  UKEYS.forEach(t=>{
+    const n=a.u[t]||0;
+    if(!n)return;
+    const v=Math.max(0,Math.min(G.send[t]||0,n));
+    let chev='';for(let i=1;i<UNITS[t].tier;i++)chev+='^';
+    h+='<div class="spRow"><div class="uchip" title="'+UNITS[t].name+'">'+
+       (chev?'<span class="chev">'+chev+'</span>':'')+
+       '<span class="dia"><span>'+artSvg(t,22,'#f5edd8')+'</span></span>'+
+       '<span class="cn">'+n+'</span></div>'+
+       '<div class="spMid"><div class="spNm">'+UNITS[t].name+'</div>'+
+       '<input type="range" min="0" max="'+n+'" value="'+v+'" '+
+       'oninput="setSplit(\''+t+'\',this.value)" aria-label="'+UNITS[t].name+'"></div>'+
+       '<div class="spNum">'+v+'</div></div>';
+  });
+  const sending=cnt(G.send), tot=cnt(a.u);
+  const none=sending<=0;
+  h+='<div class="spAct">'+
+     abtn('&#187;','Move',"splitGo('move')",none,'March the chosen troops',none?'':'go')+
+     abtn('&#9876;','Attack',"splitGo('attack')",none,'Send the chosen troops in',none?'':'hit')+
+     '</div>';
+  h+='<div class="spNote">'+(none?'Choose at least one unit.'
+      :'Sending <b>'+sending+'</b> of '+tot+'. The rest hold here. Close this and nothing is divided.')+'</div>';
+  h+='</div>';
+  dlg.innerHTML=h;
+}
+function setSplit(t,v){
+  const a=G.armies[G.selArmy];if(!a)return;
+  G.send[t]=Math.max(0,Math.min(parseInt(v,10)||0,a.u[t]||0));
+  drawSplit();
+}
+function splitGo(m){
+  closeSplit();
+  armMode(m);
+}
+function setSendAllSafe(on){
+  const a=G.armies[G.selArmy];if(!a)return;
+  UKEYS.forEach(t=>{G.send[t]=on?(a.u[t]||0):0;});
+}
+function showArmyInfo(){
+  showModal('Reading the card',
+    '<div class="meta"><b>&#128100; Troops</b> &mdash; how many units stand in this stack.</div>'+
+    '<div class="meta"><b>&#10084; Condition</b> &mdash; how much fight is left in them. Wounds heal every turn, fastest inside your own cities.</div>'+
+    '<div class="meta"><b>&#187; Move</b> &mdash; cells of marching left this turn. Foot spend 1 per open cell, 0.6 along a road.</div>'+
+    '<div class="meta"><b>&#9876; Strength</b> &mdash; an estimate of what this stack hits for, counting damage, armour and your research.</div>'+
+    '<div class="meta"><b>&#127983; Walls</b> &mdash; the defence the city adds while the garrison holds it.</div>'+
+    '<div class="meta" style="margin-top:8px">Press <b>Move</b> or <b>Attack</b> first, then tap where. <b>Split</b> divides the stack so only part of it goes.</div>',
+    [['Close',closeModal,'primary']]);
+}
+
 function bumpSend(t,d){
   const a=G.armies[G.selArmy];
   G.send[t]=Math.max(0,Math.min(a.u[t]||0,(G.send[t]||0)+d));
@@ -3412,9 +3947,62 @@ function computeMarch(){
   // you *could* march onto is struck rather than fought — so interception always wins the cell
   const ic=interceptTargets(G.selArmy,G.player);
   for(const cid in ic)info.targets[cid]=ic[cid];
+  // v5.6m: filter by intent. Move shows only ground you can march onto; Attack shows only enemies
+  // and columns you can strike. Before this every legal cell glowed and the intent was implicit.
+  if(G.mode==='move'||G.mode==='attack'){
+    const want=G.mode==='attack';
+    for(const cid in info.targets){
+      const hostile=!!info.targets[cid].icept||isHostileCell(cid);
+      if(hostile!==want)delete info.targets[cid];
+    }
+  }
   G.marchInfo=info;
 }
+// ===== v5.6m: Move and Attack are separate armed modes =====
+// Nabeel chose full CoN: tapping an army selects it and nothing more. You then press Move or
+// Attack, and only the cells legal for THAT intent light up, so you cannot walk into a fight you
+// did not mean to start. A bar across the top says which mode you are in and offers a way out.
+function isHostileCell(cid){
+  const en=G.armies[cid];
+  if(en&&en.e!==G.player&&hostileTo(G.player,en.e))return true;
+  const c=cellOf(cid);
+  if(c&&c.city){const o=ownerOf(c.p);if(o!==G.player&&(o==='neutral'||hostileTo(G.player,o)))return true;}
+  return false;
+}
+function armMode(m){
+  if(G.mode===m){clearMode();return;}                 // pressing the lit button again backs out
+  G.mode=m;G.targeting=true;
+  computeMarch();
+  const n=G.marchInfo?Object.keys(G.marchInfo.targets).length:0;
+  if(!n){
+    toast(m==='attack'?'Nothing within reach to strike this turn.'
+                      :'No cell within reach this turn &mdash; tap a distant one to set a march order.');
+  }
+  renderAll();
+}
+function clearMode(){
+  G.mode=null;G.targeting=false;G.marchInfo=null;
+  renderAll();
+}
+function stopArmy(){
+  const cid=G.selArmy;const a=G.armies[cid];
+  if(!a)return;
+  if(a.siege){doLiftSiege(cid);return;}
+  if(a.ord||onTheMarch(a)){holdArmy(cid);return;}
+}
+function renderModeBar(){
+  const mb=$('modebar');
+  if(!mb)return;
+  if(!G||!G.mode||!G.selArmy){mb.classList.remove('show');mb.innerHTML='';return;}
+  const n=G.marchInfo?Object.keys(G.marchInfo.targets).length:0;
+  const txt=G.mode==='attack'
+    ? (n?'Select a target to attack':'No target in reach &mdash; nothing glows')
+    : (n?'Select move target':'Nothing in reach &mdash; tap far to set a march order');
+  mb.innerHTML='<span class="mtx">'+txt+'</span><button onclick="clearMode()" title="Cancel">&times;</button>';
+  mb.classList.add('show');
+}
 function startTargeting(){
+  G.mode=G.mode||'move';
   G.targeting=true;
   computeMarch();
   const cols=G.marchInfo?Object.keys(G.marchInfo.targets).filter(c=>G.marchInfo.targets[c].icept).length:0;
