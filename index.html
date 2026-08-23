@@ -1410,12 +1410,18 @@ function interceptTargets(fromCid,e){
   }
   return out;
 }
-function placeArmy(cellId,e,force,mv,w,dmap){
+// muster=true means these troops APPEARED here rather than marched here: a recruit finishing its
+// training, not a column arriving. Merging takes the larger spent movement, on the reasonable
+// ground that a stack moves at the pace of its slowest part. But a unit that just stepped out of
+// the barracks never moved, and stamping its 99 onto the garrison froze the whole stack for the
+// turn. Found in v6, where every army is a garrison and it was crippling; it was quietly wrong
+// here too, and it is why a big garrison would sometimes refuse to move for no visible reason.
+function placeArmy(cellId,e,force,mv,w,dmap,muster){
   const ex=G.armies[cellId];
   if(ex&&ex.e===e){
     for(const t in force)ex.u[t]=(ex.u[t]||0)+force[t];
     if(dmap){ex.d=ex.d||{};for(const t in dmap)ex.d[t]=(ex.d[t]||0)+dmap[t];}
-    ex.mv=Math.max(ex.mv,mv);
+    if(!muster)ex.mv=Math.max(ex.mv,mv);
     ex.w=ex.w||(w?1:0);
   }else{
     G.armies[cellId]={e,u:force,mv,w:w?1:0};
@@ -1717,7 +1723,7 @@ function processTraining(empKey){
       if(q[i].left<=0){done[q[i].t]=(done[q[i].t]||0)+1;q.splice(i,1);}
     }
     if(cnt(done)){
-      placeArmy(provOf(pid).citycell,empKey,done,99,false);
+      placeArmy(provOf(pid).citycell,empKey,done,99,false,null,true);   // mustered, not marched
       if(empKey===G.player)log(cnt(done)+' fresh troop'+(cnt(done)>1?'s':'')+' muster in <b>'+provOf(pid).city+'</b>.','');
     }
     if(!q.length)delete G.train[pid];
@@ -2412,7 +2418,7 @@ function updateLogBadge(){
 const HELP_HTML='<b>The goal</b><ul><li>Hold <b>48 of the 80 cities</b> to win.</li></ul><b>Moving armies</b><ul><li>Tap an army, choose how many troops to send in the bar, then tap where to go. Picking an army arms it &mdash; the <b>Choose target</b> button is only there if you want it.</li><li>Foot march 3 cells a turn, cavalry 5, siege engines 2.</li><li>Tap somewhere far and the army takes a <b>standing order</b> &mdash; it marches on its own each turn until it arrives.</li><li>The small <b>dots</b> scattered over the map are cell centres. That dot is the exact point an army must reach to take the cell.</li></ul><b>Fighting</b><ul><li>Attacking a defended city offers <b>Assault</b> (fight now) or <b>Lay siege</b> (starve it out).</li><li>An assault fights several exchanges. If neither side breaks, your army falls back wounded &mdash; press again or regroup.</li><li>A <b>dashed ring</b> around a city means it is <b>under siege</b>. The ring is drawn in the besieging empire&rsquo;s colour, and tapping the city says who and for how long.</li><li>Units have hit points and armour. Wounds heal every turn, fastest inside your own cities.</li></ul><b>Columns on the road</b><ul><li>An army that ends its turn part-way along a leg is a <b>column</b> &mdash; strung out on the march, not formed for battle.</li><li>Anything of yours standing beside <b>either end</b> of that leg may <b>strike</b> it. Those cells glow <b>red</b> when you choose a target.</li><li>A column fights at &minus;40% and never fights to the last man: it breaks off and falls back to the ground it left.</li><li>What it really loses is the march &mdash; the crossing it had made and its standing order. Roads are fast, but a fast army is an exposed one.</li></ul><b>Cities</b><ul><li>Tier 1 troops can be raised anywhere you rule. Tier 2 and 3 need <b>buildings</b>: Barracks, Archery Range, Stables, and a Siege Workshop for any siege engine.</li><li>Buildings may only be raised in your <b>homeland</b>, or in a conquered city once you <b>annex</b> it.</li><li>A freshly conquered city pays half tribute for 5 turns while the unrest settles.</li><li>Walls toughen the garrison and slow a siege.</li></ul><b>The sea</b><ul><li><b>Port cities</b> build War Galleys from the Recruit tab. The galley appears on the water beside the city.</li><li>Fleets work exactly like armies: tap the fleet, then tap the sea you want. Tap an enemy fleet instead and you strike it.</li><li>Fleets sail 4 sea cells a turn, 6 once you have Admiralty. An enemy fleet blocks the way &mdash; you may strike it, but not sail past it.</li><li>Armies cross water by <b>boarding a fleet</b>: 3 troops per galley. Sail, then land them on a shore you choose. They cannot march the turn they come ashore.</li><li>An enemy fleet sitting on your harbour blockades it and stops you building ships there.</li></ul><b>Diplomacy</b><ul><li>You begin <b>at peace</b> with every crown. Their borders are sealed until you declare war from the <b>Diplomacy</b> panel.</li><li>Free lords &mdash; the grey cities &mdash; may be attacked at any time.</li><li>Enemy land is tinted red and hatched. Declaring war costs no gold, but every other crown thinks less of you.</li></ul><b>Research</b><ul><li>Two researches a turn. Each level adds 10% damage to its track.</li></ul>';
 // v5.6j: there was no version marker anywhere in the game, so "is the deployed file the current
 // one" could only ever be answered by diffing bytes. It is now on screen, at the foot of Help.
-const GAME_VERSION='v5.6m';
+const GAME_VERSION='v5.6n';
 function showHelp(){
   showModal('How to play',
     HELP_HTML+'<div class="meta" style="text-align:center;margin-top:10px;opacity:.65">Age of Crowns '+GAME_VERSION+'</div>',
