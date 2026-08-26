@@ -455,7 +455,7 @@ h1,h2,h3{font-weight:normal}
     <h1>AGE OF CROWNS</h1>
     <div class="sub">A medieval game of world conquest &mdash; hold 60% of all provinces to win</div>
     <!-- so "is the uploaded copy the latest?" is answerable in one glance, without scrolling -->
-    <div id="verStamp" class="sub" style="margin-top:6px;opacity:.45;font-size:13px"></div>
+    <div id="verStamp" class="sub" style="margin-top:6px;opacity:.45;font-size:13px">Age of Crowns v6.4</div>
     <h2>Choose your empire</h2>
     <div class="empgrid" id="empgrid"></div>
     <h2>Choose your rivals (2 to 5)</h2>
@@ -6062,8 +6062,9 @@ try{
   }
 }catch(e){}
 
-// stamp the build on the setup screen
-(function(){const el=document.getElementById('verStamp');if(el)el.textContent='Age of Crowns '+GAME_VERSION;})();
+// The version is written into the HTML at build time, so it shows even if this script never runs.
+// This only backfills it if someone opens src/shell.html directly without building.
+(function(){const el=document.getElementById('verStamp');if(el&&!el.textContent.trim())el.textContent='Age of Crowns '+GAME_VERSION;})();
 
 </script>
 </body>
