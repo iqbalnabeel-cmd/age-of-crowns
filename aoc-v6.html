@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Age of Crowns v6.3a</title>
+<title>Age of Crowns v6.4</title>
 <style>
 :root{
   --bg:#171310; --panel:#241d17; --panel2:#2e2620; --border:#5a4730;
@@ -116,6 +116,7 @@ h1,h2,h3{font-weight:normal}
 .seanode{cursor:pointer}
 .seanode .hit{fill:transparent}
 .seanode .dot{fill:#5d7a70;stroke:#cfe0d8;stroke-width:0.8;vector-effect:non-scaling-stroke;pointer-events:none}
+.seanode.harbour .dot{fill:#8aa89c;stroke:#e6efe9;stroke-width:0.6}
 .seanode.stgt .dot{fill:#c9a227;stroke:#fffbe8;stroke-width:1.4}
 .seanode.ssel .dot{fill:#fffbe8;stroke:#c9a227;stroke-width:2}
 .seacell{fill:var(--sea)}
@@ -453,6 +454,8 @@ h1,h2,h3{font-weight:normal}
   <div class="inner">
     <h1>AGE OF CROWNS</h1>
     <div class="sub">A medieval game of world conquest &mdash; hold 60% of all provinces to win</div>
+    <!-- so "is the uploaded copy the latest?" is answerable in one glance, without scrolling -->
+    <div id="verStamp" class="sub" style="margin-top:6px;opacity:.45;font-size:13px"></div>
     <h2>Choose your empire</h2>
     <div class="empgrid" id="empgrid"></div>
     <h2>Choose your rivals (2 to 5)</h2>
@@ -536,7 +539,9 @@ const SEAD={"SEA":{"s0":{"d":"M304 0L295 21L286 29L232 22Z","x":262,"y":9},"s1":
 // graph. Only the renderer had to change, and it draws lanes and nodes instead of 793 polygons.
 const SEARAW=SEAD.SEA, SADJRAW=SEAD.SADJ, SCOASTRAW=SEAD.COAST, PORTRAW=SEAD.PORT;
 const SEA_NODES=52;     // declared here, not in rules.js: data.js calls buildSeaNodes()
-const SEA={}, SADJ={}, SCOAST={}, PORTS={}, SEALANE=[];
+const SEA={}, SADJ={}, SCOAST={}, PORTS={}, SEALANE=[], LANECOST={};
+function laneKey(a,b){return a<b?a+'|'+b:b+'|'+a;}
+function laneCost(a,b){const c=LANECOST[laneKey(a,b)];return c===undefined?1:c;}
 const CELLNODE={};      // land cell -> the sea nodes it can put to sea from
 const SKEYS=Object.keys(SEA);
 // which land cells sit on the shore, and which sea cells they touch
@@ -712,7 +717,8 @@ const sumKills=k=>{let s=0;for(const t in k)s+=k[t];return s;};
 // v6.3: 4.4 was cells-per-turn on a 793-cell mesh. The sea is now 52 nodes and 15 steps across,
 // so 4.4 would put a fleet anywhere in under four turns and a crossing would cost nothing. At 1.6
 // the sea is ~9 turns wide against ~8 for the land, which is the point: crossing takes real time.
-const SHIP_SPEED=1.6;               // cells per turn; Admiralty (sea tech 3) adds two.
+const TRANSPORT_SPEED=1.2;   // a laden army is slower than a war galley, so a crossing is a risk
+const SHIP_SPEED=2.0;   // sea is 19 node-steps across; at 2.0 that is ~9.5 turns against ~8 by land               // cells per turn; Admiralty (sea tech 3) adds two.
 const SEA_STEP=1.0;                 // one open-water crossing; the 0.4 tail leaves fleets mid-water
 const SHIP_CAPACITY=3;              // troops each galley can carry
 // reachable sea cells within range; a hostile fleet is a target you may strike but not sail through
@@ -755,6 +761,7 @@ const ANNEX_BASE=50;
 // is 12 turns end to end. At one province per turn for foot the two match, so nothing had to be
 // rebalanced between land and sea.
 const PCADJ={};          // city cell -> neighbouring provinces' city cells
+const DRYLINK={};        // province pair -> does any crossing between them stay on land?
 const CITYCELL={};       // province id -> its city cell
 const CELLPROV={};       // cell id -> province id
 // The graph every movement, pathing and interception routine now walks. Anything standing
@@ -786,6 +793,8 @@ const BREAK_OFF=0.6;            // fraction of the force below which the attack 
 // A column caught on the road is not a formed army. It fights at a penalty, it is never annihilated,
 // and what it really loses is the march: the leg it had banked and the standing order behind it.
 // That loss is the cost that balances the speed a road buys — before this, a road was pure upside.
+const SEA_STRUNG=0.6;           // a fleet strung out mid-lane fights at 60%: no line, no wind of its own
+const SEA_ICEPT_FLOOR=0.4;      // it breaks off and runs for the nearest node rather than dying to a man
 const INTERCEPT_STRUNG=0.6;     // a column defends at 60%: it cannot form a line on the march
 const INTERCEPT_ROUNDS=2;       // a raid, not a set-piece battle
 const INTERCEPT_FLOOR=0.4;      // it breaks off and falls back at 40% rather than standing and dying
@@ -919,7 +928,7 @@ const CHIPTH=500;
 const HELP_HTML='<b>The goal</b><ul><li>Hold <b>48 of the 80 cities</b> to win.</li></ul><b>Moving armies</b><ul><li>Tap an army, choose how many troops to send in the bar, then tap where to go. Picking an army arms it &mdash; the <b>Choose target</b> button is only there if you want it.</li><li>Armies march <b>province to province</b> along the pale mesh. Foot make about one province a turn, horse two, siege engines less than one.</li><li>A <b>road</b> on a link is far quicker. You start with roads between your own homeland cities, so you move faster at home than an invader does.</li><li>Tap somewhere far and the army takes a <b>standing order</b> &mdash; it marches on its own each turn until it arrives.</li><li>Reaching a city takes the <b>whole province</b>, not one tile of it.</li></ul><b>Fighting</b><ul><li>Attacking a defended city offers <b>Assault</b> (fight now) or <b>Lay siege</b> (starve it out).</li><li>An assault fights several exchanges. If neither side breaks, your army falls back wounded &mdash; press again or regroup.</li><li>A <b>dashed ring</b> around a city means it is <b>under siege</b>. The ring is drawn in the besieging empire&rsquo;s colour, and tapping the city says who and for how long.</li><li>Units have hit points and armour. Wounds heal every turn, fastest inside your own cities.</li></ul><b>Columns on the road</b><ul><li>An army that ends its turn part-way along a leg is a <b>column</b> &mdash; strung out on the march, not formed for battle.</li><li>Anything of yours standing beside <b>either end</b> of that leg may <b>strike</b> it. Those cells glow <b>red</b> when you choose a target.</li><li>A column fights at &minus;40% and never fights to the last man: it breaks off and falls back to the ground it left.</li><li>What it really loses is the march &mdash; the crossing it had made and its standing order. Roads are fast, but a fast army is an exposed one.</li></ul><b>Cities</b><ul><li>Tier 1 troops can be raised anywhere you rule. Tier 2 and 3 need <b>buildings</b>: Barracks, Archery Range, Stables, and a Siege Workshop for any siege engine.</li><li>Buildings may only be raised in your <b>homeland</b>, or in a conquered city once you <b>annex</b> it.</li><li>A freshly conquered city pays half tribute for 5 turns while the unrest settles.</li><li>Walls toughen the garrison and slow a siege.</li></ul><b>The sea</b><ul><li><b>Port cities</b> build War Galleys from the Recruit tab. The galley appears on the water beside the city.</li><li>Fleets work exactly like armies: tap the fleet, then tap the sea you want. Tap an enemy fleet instead and you strike it.</li><li>Fleets sail 4 sea cells a turn, 6 once you have Admiralty. An enemy fleet blocks the way &mdash; you may strike it, but not sail past it.</li><li>Armies cross water by <b>boarding a fleet</b>: 3 troops per galley. Sail, then land them on a shore you choose. They cannot march the turn they come ashore.</li><li>An enemy fleet sitting on your harbour blockades it and stops you building ships there.</li></ul><b>Diplomacy</b><ul><li>You begin <b>at peace</b> with every crown. Their borders are sealed until you declare war from the <b>Diplomacy</b> panel.</li><li>Free lords &mdash; the grey cities &mdash; may be attacked at any time.</li><li>Enemy land is tinted red and hatched. Declaring war costs no gold, but every other crown thinks less of you.</li></ul><b>Research</b><ul><li>Two researches a turn. Each level adds 10% damage to its track.</li></ul>';
 // v5.6j: there was no version marker anywhere in the game, so "is the deployed file the current
 // one" could only ever be answered by diffing bytes. It is now on screen, at the foot of Help.
-const GAME_VERSION='v6.3a';
+const GAME_VERSION='v6.4';
 // garrison strength band for cities you do not own (no exact numbers — Nabeel's fog rule)
 // jump straight to one of your cities
 let _toastT=null;
@@ -1292,6 +1301,46 @@ const selRivals=new Set();
 // Everything that wires the page up and runs at load. Kept apart from data.js so the data
 // and the rules can be imported by a server, where none of this exists.
 
+// ============ v6.4: land links must not cross the sea ============
+// Province adjacency comes from a Voronoi diagram computed over LAND cells only, so two coasts
+// either side of a strait came out as neighbours with no water in between. At cell scale that was
+// a short hop nobody noticed; at province scale it let armies walk Hamburg to Uppsala across the
+// Baltic, and England to Ireland. Built once at load from the raw sea polygons.
+const SEAPOLY=[];
+function buildSeaPolys(){
+  if(SEAPOLY.length)return;
+  for(const sid in SEARAW){
+    const d=SEARAW[sid].d; if(!d)continue;
+    const P=[];const re=/(-?\d+(?:\.\d+)?)[ ,](-?\d+(?:\.\d+)?)/g;let m;
+    while((m=re.exec(d)))P.push([+m[1],+m[2]]);
+    if(P.length<3)continue;
+    let a=1e9,b=1e9,c=-1e9,e=-1e9;
+    P.forEach(([x,y])=>{if(x<a)a=x;if(x>c)c=x;if(y<b)b=y;if(y>e)e=y;});
+    SEAPOLY.push({P,a,b,c,e});
+  }
+}
+function pointAtSea(x,y){
+  for(let i=0;i<SEAPOLY.length;i++){
+    const s=SEAPOLY[i];
+    if(x<s.a||x>s.c||y<s.b||y>s.e)continue;
+    const P=s.P;let inside=false;
+    for(let j=0,k=P.length-1;j<P.length;k=j++){
+      const [xi,yi]=P[j],[xj,yk]=P[k];
+      if(((yi>y)!==(yk>y))&&(x<(xj-xi)*(y-yi)/(yk-yi)+xi))inside=!inside;
+    }
+    if(inside)return true;
+  }
+  return false;
+}
+function linkCrossesSea(a,b){
+  const A=MAPD5.cells[a],B=MAPD5.cells[b];
+  if(!A||!B)return false;
+  for(let t=0.2;t<=0.8001;t+=0.1){
+    if(pointAtSea(A.x+(B.x-A.x)*t, A.y+(B.y-A.y)*t))return true;
+  }
+  return false;
+}
+
 // ============ v6.3: clustering the sea into sparse nodes ============
 // Farthest-point sampling over the raw sea-cell centres: take a fixed starting cell, then keep
 // adding whichever cell is furthest from everything chosen so far. Deterministic, so the browser
@@ -1313,17 +1362,42 @@ function buildSeaNodes(){
     ids.forEach(i=>{ if(best[i]<0)return;
       const a=pt(i);const d=Math.hypot(a.x-F.x,a.y-F.y); if(d<best[i])best[i]=d; });
   }
+  // v6.3b: the open-sea nodes above are the trunk network. On their own a fleet leaving London had
+  // to strike out for a mid-ocean node, because farthest-point sampling deliberately avoids the
+  // shore. Nabeel's reference shows CoN carrying a second tier: markers hugging the coast beside
+  // ports. Give every port city its own water node just offshore, so a harbour is a place on the
+  // map rather than an abstraction, coastal sailing works, and a blockade has something to sit on.
+  const portSeed={};
+  for(const pid in PORTRAW){
+    const pv=MAPD5.provs[pid]; if(!pv)continue;
+    // take the nearest of this city's water cells that nobody has claimed. Taking only the single
+    // nearest left 14 of 54 ports without a harbour, because neighbouring cities compete for the
+    // same cell and the loser silently got nothing.
+    const opts=(PORTRAW[pid]||[]).filter(i=>SEARAW[i])
+      .sort((a,b)=>Math.hypot(SEARAW[a].x-pv.cx,SEARAW[a].y-pv.cy)
+                  -Math.hypot(SEARAW[b].x-pv.cx,SEARAW[b].y-pv.cy));
+    const free=opts.find(i=>!chosen.includes(i)&&!portSeed[i]);
+    if(free)portSeed[free]=pid;
+  }
+  const portCells=Object.keys(portSeed);
   // name the nodes and assign every raw cell to the nearest one
   const nodeOf={};
-  chosen.forEach((c,k)=>{const n='n'+k;SEA[n]={x:pt(c).x,y:pt(c).y,cells:[]};});
+  // chosen[] and nodeName[] are kept in step: the assignment loop below looks a node up by INDEX,
+  // and naming it from the index alone broke the moment port nodes were appended with a p prefix.
+  const nodeName=[];
+  chosen.forEach((c,k)=>{const n='n'+k;nodeName[k]=n;SEA[n]={x:pt(c).x,y:pt(c).y,cells:[],deep:1};});
+  portCells.forEach((c,k)=>{const n='p'+k;nodeName[chosen.length]=n;
+    SEA[n]={x:pt(c).x,y:pt(c).y,cells:[],port:portSeed[c]};chosen.push(c);});
   ids.forEach(i=>{
     const a=pt(i);let bn=null,bd=Infinity;
     chosen.forEach((c,k)=>{const b=pt(c);const d=Math.hypot(a.x-b.x,a.y-b.y);
-      if(d<bd){bd=d;bn='n'+k;}});
+      if(d<bd){bd=d;bn=nodeName[k];}});
     nodeOf[i]=bn; SEA[bn].cells.push(i);
   });
-  // node centre = centroid of its cells, so a node sits in its own water rather than on the seed
+  // Open-sea nodes move to the centroid of their water so they sit in their own patch. Port nodes
+  // stay put: the whole point of one is that it is beside a particular harbour.
   for(const n in SEA){
+    if(SEA[n].port)continue;
     const cs=SEA[n].cells; if(!cs.length)continue;
     let sx=0,sy=0; cs.forEach(i=>{sx+=pt(i).x;sy+=pt(i).y;});
     SEA[n].x=Math.round(sx/cs.length); SEA[n].y=Math.round(sy/cs.length);
@@ -1340,6 +1414,19 @@ function buildSeaNodes(){
     }
   }
   for(const n in SEA)SADJ[n]=SADJ[n]||[];
+  // v6.3b: a lane costs what it is worth crossing. A short hop between a harbour and the water
+  // outside it is not the same journey as a leg out into the Atlantic, and charging both a flat
+  // 1.0 made fleets move exactly one lane a turn no matter what — the two tiers were cosmetic.
+  // Costs are normalised so the MEDIAN lane is 1.0, which keeps the existing speeds meaningful.
+  {
+    const len=SEALANE.map(([a,b])=>Math.hypot(SEA[a].x-SEA[b].x,SEA[a].y-SEA[b].y));
+    const sorted=len.slice().sort((x,y)=>x-y);
+    const med=sorted[Math.floor(sorted.length/2)]||1;
+    SEALANE.forEach(([a,b],i)=>{
+      const c=Math.max(0.35,Math.min(2.5,len[i]/med));   // a harbour hop is cheap, never free
+      LANECOST[laneKey(a,b)]=Math.round(c*100)/100;
+    });
+  }
   // a node touches every land cell its member cells touched
   for(const n in SEA){
     const set={};
@@ -1347,8 +1434,11 @@ function buildSeaNodes(){
     SCOAST[n]=Object.keys(set);
   }
   // a city may launch into any node touching one of its raw port cells
+  const ownNode={};
+  for(const n in SEA)if(SEA[n].port)ownNode[SEA[n].port]=n;
   for(const pid in PORTRAW){
     const set={};
+    if(ownNode[pid])set[ownNode[pid]]=1;
     (PORTRAW[pid]||[]).forEach(i=>{ if(nodeOf[i])set[nodeOf[i]]=1; });
     PORTS[pid]=Object.keys(set);
   }
@@ -1515,7 +1605,104 @@ function navyAt(sid){return (G.navy&&G.navy[sid])||null;}
 
 function naviesOf(e){const o=[];for(const s in (G.navy||{}))if(G.navy[s].e===e)o.push(s);return o;}
 
-function fleetRange(f){return Math.max(0,shipSpeed(f.e)-(f.mv||0));}
+// ============ v6.4: land units are their own transports ============
+// Nabeel's rule: no ship needed. An army marches into the water, becomes a transport, sails, and
+// comes ashore. It cannot fight back at sea, so a crossing is a gamble rather than a ferry ride.
+function isTransport(f){return !!(f&&f.tr);}
+function vesselSpeed(f){
+  if(isTransport(f))return TRANSPORT_SPEED+(techLvOf(f.e,'sea')>=3?0.4:0);
+  return shipSpeed(f.e);
+}
+function fleetRange(f){return Math.max(0,vesselSpeed(f)-(f.mv||0));}
+function provSeaNodes(pid){          // sea nodes an army in this province can put to sea from
+  const pv=MAPD5.provs[pid]; if(!pv)return [];
+  const set={};
+  (pv.cells||[]).forEach(c=>{(LANDCOAST[c]||[]).forEach(n=>{set[n]=1;});});
+  return Object.keys(set);
+}
+function nodeLandProvs(sid){         // provinces a vessel here can put troops ashore in
+  const set={};
+  (SCOAST[sid]||[]).forEach(c=>{const cell=MAPD5.cells[c];if(cell)set[cell.p]=1;});
+  return Object.keys(set);
+}
+function canEmbark(cid){
+  const cell=cellOf(cid); if(!cell)return false;
+  return provSeaNodes(cell.p).length>0;
+}
+// the nearest province this empire holds that touches water, walking the sea graph outward
+function nearestFriendlyShore(sid,e){
+  const seenN={};seenN[sid]=1;const q=[sid];
+  while(q.length){
+    const cur=q.shift();
+    const provs=nodeLandProvs(cur).filter(p=>ownerOf(p)===e);
+    if(provs.length)return CITYCELL[provs[0]];
+    (SADJ[cur]||[]).forEach(n=>{if(!seenN[n]){seenN[n]=1;q.push(n);}});
+  }
+  return null;
+}
+// A galley runs down a transport. There is no return fire — an escort is exactly what a transport
+// lacks. Heavy losses, and whatever survives is put ashore rather than drowning outright.
+const TRANSPORT_LOSS=0.65;
+function massacreTransport(from,to,e){
+  const a=navyAt(from), d=navyAt(to);
+  const before=cnt(d.load||{});
+  const rep={att:e,def:d.e,a:a.n,d:0,win:true,attLost:0,defLost:0,sid:to,transport:true,
+             troopsBefore:before,troopsLost:0,ashore:null};
+  const surv={};let lost=0;
+  for(const t in (d.load||{})){
+    const n=d.load[t];
+    const die=Math.min(n,Math.max(1,Math.round(n*TRANSPORT_LOSS)));
+    lost+=die;
+    if(n-die>0)surv[t]=n-die;
+  }
+  rep.troopsLost=lost; rep.defLost=lost;
+  delete G.navy[to];
+  a.mv=vesselSpeed(a);
+  if(cnt(surv)){
+    const shore=nearestFriendlyShore(to,d.e);
+    if(shore){ placeArmy(shore,d.e,surv,99,1,null); rep.ashore=shore; }
+  }
+  return rep;
+}
+// march an army into the water
+function embarkTroops(cid,sid,want){
+  const a=G.armies[cid]; if(!a)return null;
+  const cell=cellOf(cid); if(!cell)return null;
+  if(!provSeaNodes(cell.p).includes(sid))return null;
+  const there=navyAt(sid);
+  if(there&&there.e!==a.e)return null;
+  const force=takeForce5(cid,want);
+  if(!cnt(force))return null;
+  if(there&&isTransport(there)){
+    for(const t in force)there.load[t]=(there.load[t]||0)+force[t];
+    there.mv=Math.max(there.mv||0,0);
+    return there;
+  }
+  if(there){                                     // joining a galley fleet: ride as cargo
+    there.load=there.load||{};
+    for(const t in force)there.load[t]=(there.load[t]||0)+force[t];
+    return there;
+  }
+  G.navy[sid]={e:a.e,n:0,mv:0,load:force,tr:1};
+  return G.navy[sid];
+}
+// put a transport's troops ashore
+function landTroops(sid,pid){
+  const f=navyAt(sid); if(!f||!f.load||!cnt(f.load))return null;
+  if(!nodeLandProvs(sid).includes(pid))return null;
+  const cc=CITYCELL[pid]; if(!cc)return null;
+  if(sealedBorder(cc,f.e))return null;
+  const force=Object.assign({},f.load);
+  const owner=ownerOf(pid);
+  const hostileLanding=owner!==f.e&&(owner==='neutral'||hostileTo(f.e,owner));
+  f.load={};
+  if(isTransport(f)&&!cnt(f.load))delete G.navy[sid];
+  if(hostileLanding){
+    return {battle:battle5(cc,cc,force,f.e,{noAnim:1}),pid};
+  }
+  placeArmy(cc,f.e,force,99,1,null);              // they come ashore winded and cannot march on
+  return {landed:true,pid};
+}
 
 function loadCount(f){return f&&f.load?cnt(f.load):0;}
 
@@ -1545,9 +1732,9 @@ function seaMap(fromSid,e,range){
       // the map contained cells one step further than the fleet could actually sail — and
       // moveNavy charged the real cost without re-checking, letting a fleet overshoot its speed.
       // Invisible while cells were small and speed was 4.4; obvious once a lane costs a whole turn.
-      const nd=(d+1)*SEA_STEP;
+      const nd=d+laneCost(cur,nk);
       if(nd>range+1e-9)continue;
-      dist[nk]=d+1;parent[nk]=cur;
+      dist[nk]=nd;parent[nk]=cur;
       if(!seaBlocked(nk,e))q.push(nk);
     }
   }
@@ -1571,7 +1758,7 @@ function moveNavy(from,to,e){
   if(!f||f.e!==e||from===to)return 0;
   const mm=seaMap(from,e,fleetRange(f));
   if(!(to in mm.dist))return 0;
-  const cost=mm.dist[to]*SEA_STEP;
+  const cost=mm.dist[to];        // dist is already the real cost now, not a hop count
   const tgt=navyAt(to);
   if(tgt&&tgt.e!==e)return 0;                      // strike it with navalClash instead
   f.mv=(f.mv||0)+cost;
@@ -1604,40 +1791,57 @@ function sailToward(from,to,e){
   if(!f||f.e!==e)return null;
   const path=seaFullPath(from,to,e);
   if(!path||path.length<2)return null;
-  let budget=fleetRange(f);
-  let step=from,i=1;
-  while(i<path.length&&budget>=SEA_STEP-0.001){
+  // Progress banked on this same leg last turn carries over. Without this a vessel slower than a
+  // long lane could never finish it: a transport makes 1.2 a turn, some lanes cost 2.5, and it
+  // would sit at 95% of the crossing for the rest of the game while its owner waited.
+  let carry=(f.to===path[1]&&f.p>0)?f.p*laneCost(from,path[1]):0;
+  let budget=fleetRange(f)+carry;
+  let spent=0, step=from, i=1;
+  while(i<path.length){
+    const leg=laneCost(path[i-1],path[i]);
+    if(budget<leg-0.001)break;
     if(navyAt(path[i])&&navyAt(path[i]).e!==e)break;    // never barge into a hostile fleet
-    budget-=SEA_STEP; step=path[i]; i++;
+    budget-=leg; spent+=leg; step=path[i]; i++;
   }
-  const partialInto=(cur,rest)=>{        // spend whatever is left standing out on open water
-    const g=navyAt(cur);
-    if(!g||rest<=0||budget<=0.001)return false;
-    const nxt=path[i];
-    if(!nxt||(navyAt(nxt)&&navyAt(nxt).e!==e))return false;
-    const already=(g.to===nxt?(g.p||0):0)*SEA_STEP;
-    g.to=nxt; g.p=Math.min(0.95,(already+budget)/SEA_STEP);
-    g.mv=(g.mv||0)+budget; budget=0;
-    return true;
-  };
-  if(step===from){
-    // not even one full crossing left: stand out on the water part-way across
-    if(partialInto(from,path.length-1)){f.ord=to;return {moved:1,at:from,left:path.length-1,partial:1};}
-    return {moved:0,at:from,left:path.length-1};
+  spent=Math.max(0,spent-carry);                        // the banked part was paid for last turn
+  if(step!==from){
+    const tgt=navyAt(step);
+    for(let j=0;j+1<i;j++)G.animQ.push({from:path[j],to:path[j+1],e,t:'ship',sea:1});
+    f.mv=(f.mv||0)+spent;
+    delete f.to; delete f.p;
+    if(tgt&&tgt.e===e){tgt.n+=f.n;tgt.mv=Math.max(tgt.mv||0,f.mv);mergeLoad(tgt,f);}
+    else G.navy[step]=f;
+    delete G.navy[from];
   }
-  moveNavy(from,step,e);
-  const fl=navyAt(step);
+  const g=navyAt(step);
   const rest=(step===to)?null:seaFullPath(step,to,e);
-  if(fl){
-    if(step===to){delete fl.ord;delete fl.to;delete fl.p;}
-    else {fl.ord=to; partialInto(step,rest?rest.length-1:0);}   // leftover sail carries onto the water
+  const left=rest?rest.length-1:0;
+  if(g){
+    if(step===to){delete g.ord;delete g.to;delete g.p;delete g.sea;}
+    else{
+      g.ord=to;
+      const nxt=(step===from)?path[i]:(rest&&rest[1]);
+      // whatever sail is left is spent standing out on open water, and it counts next turn
+      if(nxt&&budget>0.001&&!(navyAt(nxt)&&navyAt(nxt).e!==e)){
+        const leg=laneCost(step,nxt);
+        g.to=nxt; g.p=Math.min(0.95,budget/leg);
+        if(step===from)g.mv=(g.mv||0)+Math.max(0,budget-carry);
+        else g.mv=(g.mv||0)+budget;
+      }
+    }
   }
-  return {moved:1,at:step,left:rest?rest.length-1:0};
+  // Standing out on the water part way across IS progress. Reporting it as moved:0 made
+  // advanceNavyOrders read it as boxed in and cancel the order, leaving the vessel frozen
+  // mid-lane with nothing to sail towards for the rest of the game.
+  const partial=(g&&g.to&&g.p>0)?1:0;
+  return {moved:(step!==from||partial)?1:0,at:step,left,partial};
 }
 
 function advanceNavyOrders(e){
   naviesOf(e).forEach(sid=>{
     const f=G.navy[sid];
+    // belt and braces: a leg with no order behind it can never finish, so put it back on its node
+    if(f&&f.to&&(!f.ord||f.ord===sid))clearLeg(f);
     if(!f||!f.ord||f.ord===sid)return;
     const dest=f.ord;
     if(!SEA[dest]){delete f.ord;return;}
@@ -1652,9 +1856,11 @@ function advanceNavyOrders(e){
 function navalClash(from,to,e){
   const a=navyAt(from),d=navyAt(to);
   if(!a||!d||a.e!==e)return null;
+  if(isTransport(a))return null;                   // troops at sea cannot attack anything
   const mm=seaMap(from,e,fleetRange(a));
   if(!(to in mm.dist))return null;
-  a.mv=shipSpeed(e);
+  if(isTransport(d))return massacreTransport(from,to,e);
+  a.mv=vesselSpeed(a);
   const Sa=a.n*(1+0.12*techLvOf(e,'sea'))*rand(0.85,1.15);
   const Sd=d.n*(1+0.12*techLvOf(d.e,'sea'))*rand(0.85,1.15);
   const rep={att:e,def:d.e,a:a.n,d:d.n,win:false,attLost:0,defLost:0,sid:to};
@@ -1668,6 +1874,269 @@ function navalClash(from,to,e){
     const dl=Math.min(Math.round(d.n*0.5*Sa/Sd),d.n-1);
     rep.attLost=a.n;rep.defLost=dl;
     d.n-=dl;delete G.navy[from];
+  }
+  return rep;
+}
+
+// AI AMPHIBIOUS INVASION (v6.4)
+// Cutting the walking-on-water links made England a real island, and an island power that cannot
+// embark is simply out of the game: over 60 AI turns it went 6 provinces to 7 while the mainland
+// powers reached 28, 25 and 13. So the AI has to know how to cross.
+function landReach(k){
+  const seen={};
+  const q=[];
+  provsOf(k).forEach(p=>{seen[p]=1;const c=CITYCELL[p];if(c)q.push(c);});
+  while(q.length){
+    const c=q.shift();
+    moveAdj(c).forEach(n=>{
+      const pid=CELLPROV[n];
+      if(pid&&!seen[pid]){seen[pid]=1;const cc=CITYCELL[pid];if(cc)q.push(cc);}
+    });
+  }
+  return seen;
+}
+
+function overseasTargets(k){
+  const reach=landReach(k);
+  const out=[];
+  for(const pid in MAPD5.provs){
+    if(reach[pid])continue;                       // it can be walked to; no need for ships
+    const o=ownerOf(pid);
+    if(o===k)continue;
+    if(!(o==='neutral'||hostileTo(k,o)))continue;
+    if(!landingNodes(pid).length)continue;        // nowhere to put men ashore
+    out.push(pid);
+  }
+  return out;
+}
+
+const PROVNODES={};                               // province -> sea nodes that can land on it
+function buildLandingIndex(){
+  for(const k in PROVNODES)delete PROVNODES[k];
+  for(const sid in SEA){
+    nodeLandProvs(sid).forEach(pid=>{(PROVNODES[pid]=PROVNODES[pid]||[]).push(sid);});
+  }
+}
+function landingNodes(pid){
+  if(!Object.keys(PROVNODES).length)buildLandingIndex();
+  return PROVNODES[pid]||[];
+}
+
+// One BFS out from the port, stopping at the first water that touches ground this force could
+// actually take. The first version scored every target against every node every turn, which was
+// both slow and wrong: it sent three English spearmen on an eight-hop voyage to Arabia.
+const AI_MAX_CROSSING=4;                          // an AI will not plan a voyage longer than this
+function garrisonOf(pid){
+  const cc=CITYCELL[pid];
+  const a=cc&&G.armies[cc];
+  return a?cnt(a.u):0;
+}
+function nearestCrossing(start,k,wanted,force){
+  const seen={};seen[start]=1;
+  let front=[start],hops=0;
+  while(front.length&&hops<AI_MAX_CROSSING){
+    hops++;
+    const next=[];
+    for(const c of front)for(const nk of (SADJ[c]||[])){
+      if(seen[nk])continue;
+      seen[nk]=1;
+      const hit=nodeLandProvs(nk).find(p=>wanted[p]&&force>garrisonOf(p)*1.3);
+      if(hit)return {dest:nk,tgt:hit,hops};
+      if(enemyNavyAt(nk,k))continue;              // do not plot a course through a hostile fleet
+      next.push(nk);
+    }
+    front=next;
+  }
+  return null;
+}
+
+// A transport that has been bobbing about for six turns with nothing to attack is a lost army.
+// Get the men back onto our own ground rather than leaving them to drown in some AI daydream.
+const AI_SEA_PATIENCE=6;
+function aiSendHome(k,sid,f){
+  let shore=nearestFriendlyShore(sid,k);
+  if(!shore){
+    // no ground of ours anywhere within reach: take any beach that is not sealed against us
+    const pid=nodeLandProvs(sid).find(p=>{
+      const cc=CITYCELL[p];
+      return cc&&!sealedBorder(cc,k)&&!(G.armies[cc]&&G.armies[cc].e!==k);
+    });
+    shore=pid?CITYCELL[pid]:null;
+  }
+  if(!shore){
+    // truly nowhere. They are not allowed to bob about for the rest of the game.
+    const lost=loadCount(f);
+    f.load={};
+    if(isTransport(f))delete G.navy[sid];
+    if(lost)log(empName(k)+' lost '+lost+' men at sea with nowhere left to land.','bad');
+    return true;
+  }
+  placeArmy(shore,k,f.load,99,1,null);
+  f.load={};
+  if(isTransport(f))delete G.navy[sid];
+  return true;
+}
+
+// An empire can be knocked out while its men are still in the water, and nobody's aiTurn ever runs
+// for it again — one such crossing sat afloat for 47 turns. Nothing may outlive its owner at sea.
+function sweepGhostFleets(){
+  for(const sid in (G.navy||{})){
+    const f=G.navy[sid];
+    if(!f)continue;
+    const e=G.emp[f.e];
+    if(e&&e.alive)continue;
+    delete G.navy[sid];
+  }
+}
+
+// Any transport of ours beside ground worth taking puts its men ashore.
+function aiLandTroops(k){
+  let acted=false;
+  naviesOf(k).forEach(sid=>{
+    const f=G.navy[sid];
+    if(!f||!loadCount(f))return;
+    if(f.to){f.sea=(f.sea||0)+1;return;}            // still mid-crossing: nothing to do yet
+    f.sea=(f.sea||0)+1;
+    const provs=nodeLandProvs(sid);
+    let best=null,bestScore=0;
+    provs.forEach(pid=>{
+      const o=ownerOf(pid);
+      if(o===k)return;
+      if(!(o==='neutral'||hostileTo(k,o)))return;
+      const cc=CITYCELL[pid];
+      if(!cc||sealedBorder(cc,k))return;
+      const score=cnt(f.load)-garrisonOf(pid)*1.3; // do not storm a wall we will bounce off
+      if(score>bestScore){bestScore=score;best=pid;}
+    });
+    if(best){
+      const r=landTroops(sid,best);
+      if(r){
+        acted=true;
+        const still=navyAt(sid); if(still){delete still.ord;delete still.sea;}
+        if(r.battle)logBattle5(r.battle);
+        else log(empName(k)+' put troops ashore in <b>'+provOf(best).city+'</b>.');
+      }
+      return;
+    }
+    const home=provs.find(p=>ownerOf(p)===k);
+    if(home&&(!f.ord||f.ord===sid)){               // arrived somewhere useless: step back onto our ground
+      if(landTroops(sid,home))acted=true;
+      return;
+    }
+    if(f.sea>AI_SEA_PATIENCE&&aiSendHome(k,sid,f))acted=true;
+  });
+  return acted;
+}
+
+// Load a crossing if there is somewhere worth going and nobody of ours is already at sea.
+function aiEmbark(k){
+  if(naviesOf(k).some(sid=>loadCount(G.navy[sid])))return false;   // one crossing at a time
+  const reach=landReach(k);
+  const wanted={};let any=false;
+  for(const pid in MAPD5.provs){
+    if(reach[pid])continue;                        // it can be walked to; no need for ships
+    const o=ownerOf(pid);
+    if(o===k)continue;
+    if(!(o==='neutral'||hostileTo(k,o)))continue;
+    wanted[pid]=1;any=true;
+  }
+  if(!any)return false;
+  let plan=null;
+  for(const pid of provsOf(k)){
+    const cc=CITYCELL[pid];
+    const army=G.armies[cc];
+    if(!army||army.e!==k||army.siege)continue;
+    const spare=cnt(army.u)-3;                     // never strip a city bare
+    if(spare<3)continue;
+    // an empty node only: loading men onto a war galley made them cargo on a warship, and the
+    // galley then sailed off to fight with the army still aboard
+    for(const start of provSeaNodes(pid)){
+      if(navyAt(start))continue;
+      const c=nearestCrossing(start,k,wanted,spare);
+      if(c&&(!plan||c.hops<plan.hops))plan={hops:c.hops,cc,start,dest:c.dest,tgt:c.tgt};
+    }
+  }
+  if(!plan)return false;
+  const army=G.armies[plan.cc];
+  const want={};let kept=0;
+  UKEYS.forEach(t=>{let n=army.u[t]||0;while(n>0&&kept<3){kept++;n--;}if(n>0)want[t]=n;});
+  if(!cnt(want))return false;
+  const f=embarkTroops(plan.cc,plan.start,want);
+  if(!f)return false;
+  f.ord=plan.dest; f.sea=0;
+  log(empName(k)+' embarks '+cnt(want)+' troops for <b>'+provOf(plan.tgt).city+'</b>.');
+  return true;
+}
+
+// SEA INTERCEPTION (v6.4)
+// On land a column caught part way along a road can be struck by anyone beside either end of that
+// road. The sea works the same way, and out here it bites harder: a vessel mid-lane has no ground
+// to fall back on and nothing but open water around it. This is what war galleys are actually for.
+function atSeaMidLane(v){return !!(v&&v.to&&v.p>0);}
+
+function seaInterceptTargets(fromSid,e){
+  const out={};
+  const f=navyAt(fromSid);
+  if(!f||f.e!==e)return out;
+  if(isTransport(f))return out;                 // troops at sea cannot attack anything
+  if(fleetRange(f)<=0)return out;               // already sailed this turn
+  const adj=SADJ[fromSid]||[];
+  for(const sid in (G.navy||{})){
+    const v=G.navy[sid];
+    if(!v||sid===fromSid)continue;
+    if(!atSeaMidLane(v))continue;               // sitting on a node: fight it with navalClash
+    if(v.e===e||!hostileTo(e,v.e))continue;
+    if(adj.indexOf(sid)>=0)out[sid]={icept:true,far:false};
+    else if(adj.indexOf(v.to)>=0)out[sid]={icept:true,far:true};
+  }
+  return out;
+}
+
+function thinLoad(f,keepFrac){
+  if(!f||!f.load)return 0;
+  let lost=0;
+  for(const t in f.load){
+    const n=f.load[t];
+    const keep=Math.floor(n*keepFrac);
+    lost+=n-keep;
+    if(keep>0)f.load[t]=keep; else delete f.load[t];
+  }
+  return lost;
+}
+
+function seaIntercept(fromSid,atSid,e){
+  const a=navyAt(fromSid), d=navyAt(atSid);
+  if(!a||!d||a.e!==e)return null;
+  if(!seaInterceptTargets(fromSid,e)[atSid])return null;
+  if(isTransport(d)){
+    const rep=massacreTransport(fromSid,atSid,e);
+    if(rep)rep.icept=true;
+    return rep;
+  }
+  a.mv=vesselSpeed(a);                          // running a fleet down costs the whole turn
+  const Sa=a.n*(1+0.12*techLvOf(e,'sea'))*rand(0.9,1.1);
+  const Sd=Math.max(d.n*(1+0.12*techLvOf(d.e,'sea'))*rand(0.9,1.1)*SEA_STRUNG,0.01);
+  const share=Sa/(Sa+Sd);
+  // Fleets here are small — three or four galleys — so the arithmetic has to behave at that size.
+  // Ceil on the floor meant a fleet of three could never lose more than one ship; round is right.
+  const floor=Math.max(1,Math.round(d.n*SEA_ICEPT_FLOOR));
+  const rep={att:e,def:d.e,a:a.n,d:d.n,win:false,attLost:0,defLost:0,sid:atSid,
+             icept:true,broke:false,troopsBefore:loadCount(d),troopsLost:0};
+  let dl=Math.min(Math.round(d.n*0.7*share),Math.max(0,d.n-floor));
+  // An ambusher's losses come from what the ambushed force can actually throw back, not from how
+  // many ships the ambusher brought. Scaling by a.n meant a squadron of eight lost as many galleys
+  // running down three as a pair of them would have — the bigger the fleet, the worse it did.
+  let al=Math.min(Math.round(Sd*0.22),a.n-1);
+  d.n-=dl; a.n-=al;
+  rep.attLost=al; rep.defLost=dl; rep.win=dl>al;
+  // galleys that go down take the men riding on them
+  if(rep.troopsBefore&&rep.d>0)rep.troopsLost=thinLoad(d,d.n/rep.d);
+  rep.broke=d.n<=floor;
+  clearLeg(d); delete d.ord;                    // the leg is lost: it falls back on the node behind it
+  d.mv=vesselSpeed(d);
+  if(d.n<=0){                                   // the floor should prevent this; belt and braces
+    delete G.navy[atSid];
+    rep.broke=true;
   }
   return rep;
 }
@@ -1803,6 +2272,7 @@ function makePeace(a,b,quiet){
 }
 
 function tickDiplomacy(){
+  sweepGhostFleets();
   G.dip=G.dip||{};
   for(const k in G.dip){
     const d=G.dip[k];
@@ -1980,22 +2450,32 @@ function newGame(playerKey,rivalKeys,diff){
 }
 
 function buildProvinceGraph(){
+  for(const k in PROVNODES)delete PROVNODES[k];
   for(const k in PCADJ)delete PCADJ[k];        // idempotent: this used to push without clearing
+  for(const k in DRYLINK)delete DRYLINK[k];
+  buildSeaPolys();
   for(const pid in MAPD5.provs)CITYCELL[pid]=MAPD5.provs[pid].citycell;
   for(const cid in MAPD5.cells)CELLPROV[cid]=MAPD5.cells[cid].p;
-  const seen={};
+  // Two provinces can touch in several places. Walkable if AT LEAST ONE of those crossings stays
+  // on dry land, so gather them all before deciding rather than judging on the first one seen.
   for(const a in CADJ){
     const pa=CELLPROV[a];
     for(const b of CADJ[a]){
       const pb=CELLPROV[b];
       if(pa===pb)continue;
       const k=pa<pb?pa+'|'+pb:pb+'|'+pa;
-      if(seen[k])continue;seen[k]=1;
-      const ca=CITYCELL[pa],cb=CITYCELL[pb];
-      if(!ca||!cb)continue;
-      (PCADJ[ca]=PCADJ[ca]||[]).push(cb);
-      (PCADJ[cb]=PCADJ[cb]||[]).push(ca);
+      if(DRYLINK[k])continue;                       // already known dry, nothing to prove
+      if(!(k in DRYLINK))DRYLINK[k]=false;
+      if(!linkCrossesSea(a,b))DRYLINK[k]=true;
     }
+  }
+  for(const k in DRYLINK){
+    if(!DRYLINK[k])continue;
+    const [pa,pb]=k.split('|');
+    const ca=CITYCELL[pa],cb=CITYCELL[pb];
+    if(!ca||!cb)continue;
+    (PCADJ[ca]=PCADJ[ca]||[]).push(cb);
+    (PCADJ[cb]=PCADJ[cb]||[]).push(ca);
   }
 }
 
@@ -2928,16 +3408,41 @@ function aiTurn(k){
   naviesOf(k).forEach(sid=>{
     if(G.over)return;
     const f=G.navy[sid];
-    if(!f||f.e!==k)return;
+    if(!f||f.e!==k||isTransport(f))return;
+    // A crossing in progress is the best target on the board, so look for one first. Troops in the
+    // water are worth chasing at any odds; a fleet strung out mid-lane defends at 60%, so the bar
+    // is lower than for a set-piece action on a node.
+    const ic=seaInterceptTargets(sid,k);
+    let hit=null;
+    for(const n in ic){
+      const v=navyAt(n); if(!v)continue;
+      const worth=isTransport(v)?1e9:(loadCount(v)?v.n*0.7:v.n*0.85);
+      if(f.n<worth&&!isTransport(v))continue;
+      if(!hit||isTransport(v))hit=n;
+      if(isTransport(v))break;
+    }
+    if(hit){
+      const rep=seaIntercept(sid,hit,k);
+      if(rep){
+        if(rep.transport)log(empName(k)+' caught '+empName(rep.def)+"'s troops in open water &mdash; "+rep.troopsLost+' drowned.','bad');
+        else log(empName(k)+(rep.win?' ran down ':' failed to run down ')+empName(rep.def)+"'s fleet mid&#8209;crossing.");
+        return;
+      }
+    }
     for(const n of (SADJ[sid]||[])){
       const foe=navyAt(n);
       if(!foe||foe.e===k||!hostileTo(k,foe.e))continue;
-      if(f.n<foe.n*1.3)continue;
+      if(!isTransport(foe)&&f.n<foe.n*1.3)continue;
       const rep=navalClash(sid,n,k);
-      if(rep)log(empName(k)+(rep.win?' swept ':' was repelled by ')+empName(rep.def)+"'s galleys at sea.");
+      if(rep){
+        if(rep.transport)log(empName(k)+' caught '+empName(rep.def)+"'s troops in open water &mdash; "+rep.troopsLost+' drowned.','bad');
+        else log(empName(k)+(rep.win?' swept ':' was repelled by ')+empName(rep.def)+"'s galleys at sea.");
+      }
       break;
     }
   });
+  aiLandTroops(k);                  // anyone who has arrived goes ashore before new orders are cut
+  aiEmbark(k);                      // and an island power looks for a crossing worth making
   advanceOrders(k);                 // AI columns under standing orders march on the same budget
   const list=armiesOf(k);
   const acted=new Set(aiInterceptPass(k,P,D));   // strike passing columns first; those armies are then spent
@@ -3844,10 +4349,12 @@ function initMap(){
     });
     for(const sid in SEA){
       const n=SEA[sid];
-      // a generous invisible disc carries the tap; the visible marker stays small
-      sh+='<g class="seanode" data-s="'+sid+'">'+
-          '<circle class="hit" cx="'+n.x+'" cy="'+n.y+'" r="16"/>'+
-          '<circle class="dot" cx="'+n.x+'" cy="'+n.y+'" r="3.2"/>'+
+      // two tiers, as the reference draws them: open-sea nodes are the trunk network and read
+      // heavier; a harbour node sits tight against its city and reads as a smaller anchorage.
+      const harbour=!!n.port;
+      sh+='<g class="seanode'+(harbour?' harbour':'')+'" data-s="'+sid+'">'+
+          '<circle class="hit" cx="'+n.x+'" cy="'+n.y+'" r="'+(harbour?11:16)+'"/>'+
+          '<circle class="dot" cx="'+n.x+'" cy="'+n.y+'" r="'+(harbour?2.2:3.4)+'"/>'+
           '</g>';
     }
     gSea.innerHTML=sh;
@@ -4078,16 +4585,23 @@ function updateMap(){
   for(const sid in (G.navy||{})){
     const f=G.navy[sid];
     const sc=seaXY(sid,G.navy[sid])||SEA[sid];
-    if(!sc||!f.n)continue;
+    // a transport carries no galleys at all, and the old `!f.n` guard drew it nowhere: troops put
+    // to sea simply vanished off the map until they landed again
+    const tr=isTransport(f);
+    if(!sc||(!f.n&&!tr))continue;
     const selCls=G.selSea===sid?' zsel':'';
-    zh+='<g class="zone'+selCls+'" data-f="'+sid+'">';
+    zh+='<g class="zone'+selCls+(tr?' transp':'')+'" data-f="'+sid+'">';
     zh+='<circle cx="'+sc.x+'" cy="'+sc.y+'" r="'+(15*s)+'" fill="transparent"/>';
-    zh+='<circle cx="'+sc.x+'" cy="'+sc.y+'" r="'+(11*s)+'" class="zc" fill="'+empColor(f.e)+'" fill-opacity="0.35"/>';
-    zh+='<g transform="translate('+(sc.x-9*s)+' '+(sc.y-10*s)+') scale('+(0.62*s)+')" style="color:'+empColor(f.e)+'">'+ART.ship+'</g>';
+    zh+='<circle cx="'+sc.x+'" cy="'+sc.y+'" r="'+(11*s)+'" class="zc" fill="'+empColor(f.e)+'" fill-opacity="'+(tr?'0.22':'0.35')+'"'+
+        (tr?' stroke="'+empColor(f.e)+'" stroke-width="'+(1.4*s)+'" stroke-dasharray="'+(3*s)+' '+(2.4*s)+'"':'')+'/>';
+    zh+='<g transform="translate('+(sc.x-9*s)+' '+(sc.y-10*s)+') scale('+(0.62*s)+')" style="color:'+empColor(f.e)+'"'+
+        (tr?' opacity="0.75"':'')+'>'+ART.ship+'</g>';
     const chipX=sc.x+11*s, chipY=sc.y-8*s;
+    const chipN=tr?loadCount(f):f.n;
     zh+='<rect x="'+chipX+'" y="'+chipY+'" width="'+(26*s)+'" height="'+(15*s)+'" rx="'+(4*s)+'" fill="'+empColor(f.e)+'" stroke="#241d17" stroke-width="'+s+'"/>';
-    zh+='<text x="'+(chipX+13*s)+'" y="'+(chipY+11.5*s)+'" text-anchor="middle" font-size="'+(11*s)+'" font-weight="bold" fill="#fff">'+f.n+'</text>';
-    if(loadCount(f))zh+='<text x="'+sc.x+'" y="'+(sc.y+20*s)+'" text-anchor="middle" font-size="'+(10*s)+'" fill="#f5edd8" style="paint-order:stroke;stroke:#241d17;stroke-width:'+(2*s)+'px">&#9876; '+loadCount(f)+'</text>';
+    zh+='<text x="'+(chipX+13*s)+'" y="'+(chipY+11.5*s)+'" text-anchor="middle" font-size="'+(11*s)+'" font-weight="bold" fill="#fff">'+
+        (tr?'&#9876;':'')+chipN+'</text>';
+    if(!tr&&loadCount(f))zh+='<text x="'+sc.x+'" y="'+(sc.y+20*s)+'" text-anchor="middle" font-size="'+(10*s)+'" fill="#f5edd8" style="paint-order:stroke;stroke:#241d17;stroke-width:'+(2*s)+'px">&#9876; '+loadCount(f)+'</text>';
     zh+='</g>';
   }
   svg.querySelectorAll('#gSea .seanode').forEach(el=>{
@@ -4098,7 +4612,8 @@ function updateMap(){
     el.classList.toggle('stgt',tgt);
     // SVG r is a presentation attribute, not reliably settable from CSS across browsers
     const dot=el.querySelector('.dot');
-    if(dot)dot.setAttribute('r',sel?5.5:(tgt?4.6:3.2));
+    const base=el.classList.contains('harbour')?2.2:3.4;
+    if(dot)dot.setAttribute('r',sel?base+2.3:(tgt?base+1.4:base));
   });
   // light the lanes a selected fleet could actually sail
   svg.querySelectorAll('#gSea .sealane').forEach(el=>el.classList.remove('lit'));
@@ -4719,6 +5234,9 @@ function renderBar(){
   if(G.moreOpen){
     ah+='<div class="arow">';
     ah+=abtn('&#9880;','Split',"openSplit()",!!splitWhy,splitWhy);
+    // v6.4: any coastal province can put to sea. The army becomes its own transport.
+    const seaWhy=canEmbark(G.selArmy)?'':'This province does not touch the sea.';
+    ah+=abtn('&#9973;','To sea',"uiPutToSea()",!!seaWhy,seaWhy||'March into the water as a transport');
     ah+=abtn('&#187;','Forced',"toggleForced()",false,'+2 cells, arrives winded',G.forced?'on':'');
     if(a.siege)ah+=abtn('&#9968;','Lift siege',"doLiftSiege('"+G.selArmy+"')",false,'Raise the siege and free the army');
     ah+='</div>';
@@ -4743,6 +5261,42 @@ function positionActBar(){                 // sit the buttons directly above the
 }
 
 function toggleMore(){G.moreOpen=!G.moreOpen;renderBar();}
+// Put the selected army — or the part of it chosen in Split — into the water.
+function uiPutToSea(){
+  const cid=G.selArmy, a=G.armies[cid];
+  if(!a)return;
+  const nodes=provSeaNodes(cellOf(cid).p).filter(n=>{const o=navyAt(n);return !o||o.e===G.player;});
+  if(!nodes.length){toast('No open water off this coast.');return;}
+  const want={};UKEYS.forEach(t=>{want[t]=Math.max(0,Math.min((G.send&&G.send[t])||0,a.u[t]||0));});
+  if(!cnt(want)){toast('Choose at least one unit to send.');return;}
+  const go=sid=>{
+    const v=embarkTroops(cid,sid,want);
+    if(!v){toast('They could not put to sea there.');return;}
+    log(empName(G.player)+' puts '+cnt(want)+' troops to sea off <b>'+provOf(cellOf(cid).p).city+'</b>.','');
+    G.selArmy=G.armies[cid]?cid:null;G.mode=null;G.targeting=false;G.moreOpen=false;
+    G.selSea=sid;renderAll();openSeaPanel(sid);saveGame();
+  };
+  if(nodes.length===1){go(nodes[0]);return;}
+  showModal('Put to sea',
+    '<div class="meta">'+cnt(want)+' troops will become a transport. They cannot fight at sea.</div>'+
+    nodes.map(n=>'<button style="width:100%;margin-top:6px" onclick="closeModal();__toSea(\''+n+'\')">Sail from '+
+      (SEA[n].port?provOf(SEA[n].port).city+' harbour':'the open coast')+'</button>').join(''),
+    [['Cancel',closeModal,'']]);
+  window.__toSea=go;
+}
+function uiLandProv(sid,pid){
+  const r=landTroops(sid,pid);
+  if(!r){toast('They cannot land there.');return;}
+  if(r.battle){
+    log(empName(G.player)+' storms ashore at <b>'+provOf(pid).city+'</b>.','');
+  }else{
+    log(empName(G.player)+' lands troops at <b>'+provOf(pid).city+'</b>.','');
+  }
+  G.selSea=navyAt(sid)?sid:null;
+  renderAll();
+  if(G.selSea)openSeaPanel(G.selSea); else closeDrawer();
+  saveGame();
+}
 
 function openSplit(){
   const a=G.armies[G.selArmy];
@@ -5003,6 +5557,36 @@ function doBuild(pid,b){
   }else toast('Cannot start that project right now.');
 }
 
+// Three different sea fights now share one wording: a fleet action, a transport run down, and an
+// interception mid-lane. They read very differently to a player and used to all say "galleys".
+function seaRepLine(rep){
+  const foe=empName(rep.def);
+  if(rep.transport)return 'Your galleys caught '+foe+"'s troops in open water and cut them to pieces.";
+  if(rep.icept)return rep.win
+    ? 'Your galleys ran down '+foe+"'s fleet mid&#8209;crossing and broke it."
+    : 'Your galleys ran out at '+foe+' mid&#8209;crossing and came off worse.';
+  return rep.win?('Your fleet broke '+foe+"'s galleys at sea."):('Your fleet was shattered by '+foe+' at sea.');
+}
+function seaRepModal(rep){
+  const foe=empName(rep.def);
+  if(rep.transport){
+    let b='<span class="good">Caught in open water.</span><br>'+
+          rep.troopsLost+' of '+rep.troopsBefore+' '+foe+' troops drowned.';
+    b+=rep.ashore?'<br>The rest struggled ashore.':'<br>Not a man reached land.';
+    return ['Troops run down',b];
+  }
+  if(rep.icept){
+    let b=(rep.win?'<span class="good">Caught mid&#8209;crossing.</span>':'<span class="bad">They fought clear.</span>')+
+          '<br>You lost '+rep.attLost+' galleys; they lost '+rep.defLost+'.';
+    if(rep.broke)b+='<br>What is left of them broke off and ran.';
+    if(rep.troopsLost)b+='<br>'+rep.troopsLost+' of their troops went down with the ships.';
+    return ['Interception at sea',b];
+  }
+  return [rep.win?'Naval victory':'Fleet lost',
+    (rep.win?'<span class="good">The sea is yours.</span>':'<span class="bad">Your galleys were sunk.</span>')+
+    '<br>You lost '+rep.attLost+' galleys; the enemy lost '+rep.defLost+'.'];
+}
+
 function seaClick(sid){
   if(G.over)return;
   const f=navyAt(sid);
@@ -5021,15 +5605,15 @@ function seaClick(sid){
             ()=>toast('War declared on '+empName(foeE)+'. Strike that fleet again.'));
           return;
         }
-        const rep=navalClash(G.selSea,sid,G.player);
+        const icept=!!(G._seaIcept&&G._seaIcept[sid]);
+        const rep=icept?seaIntercept(G.selSea,sid,G.player):navalClash(G.selSea,sid,G.player);
         if(rep){
-          log(rep.win?('Your fleet broke '+empName(rep.def)+"'s galleys at sea."):('Your fleet was shattered by '+empName(rep.def)+' at sea.'),rep.win?'':'bad');
-          G.seaTargeting=false;G.selSea=rep.win?sid:null;
+          log(seaRepLine(rep),rep.win?'':'bad');
+          // an interceptor never takes the water it fought over: it holds its own node
+          G.seaTargeting=false;G.selSea=(!icept&&rep.win)?sid:(navyAt(G.selSea)?G.selSea:null);
           renderAll();if(G.selSea)openSeaPanel(G.selSea);saveGame();
-          showModal(rep.win?'Naval victory':'Fleet lost',
-            (rep.win?'<span class="good">The sea is yours.</span>':'<span class="bad">Your galleys were sunk.</span>')+
-            '<br>You lost '+rep.attLost+' galleys; the enemy lost '+rep.defLost+'.',
-            [['Continue',closeModal,'primary']]);
+          const t=seaRepModal(rep);
+          showModal(t[0],t[1],[['Continue',closeModal,'primary']]);
           return;
         }
         // v5.6j: one message used to cover two different causes, so a fleet that had simply spent
@@ -5077,12 +5661,16 @@ function seaClick(sid){
 
 function startSeaTargeting(){
   G.seaTargeting=true;
-  G._seaTargets={};
+  G._seaTargets={};G._seaIcept={};
   const f=navyAt(G.selSea);
   if(f&&f.e===G.player){
     const mm=seaMap(G.selSea,G.player,fleetRange(f));
     for(const k in mm.dist)if(k!==G.selSea)G._seaTargets[k]=1;   // hostile cells are in here too: reachable, but only as a target
-  }
+    // a vessel caught mid-lane can be run down even where you could not sail, exactly as a column
+    // on a road can be struck from ground you could not march onto
+    G._seaIcept=seaInterceptTargets(G.selSea,G.player);
+    for(const k in G._seaIcept)G._seaTargets[k]=1;
+  }else G._seaIcept={};
   renderAll();
   openSeaPanel(G.selSea);
 }
@@ -5091,10 +5679,13 @@ function openSeaPanel(sid){
   const f=navyAt(sid);
   if(!f){closeDrawer();return;}
   const mine=f.e===G.player;
-  let h='<div class="meta">'+empName(f.e)+' &middot; '+f.n+' galley'+(f.n>1?'s':'')+'</div>';
+  const tr=isTransport(f);
+  let h='<div class="meta">'+empName(f.e)+' &middot; '+
+        (tr?cnt(f.load||{})+' troops at sea':f.n+' galley'+(f.n>1?'s':''))+'</div>';
+  if(tr)h+='<div class="meta" style="color:var(--danger)">&#9888; Troops at sea cannot fight. A war galley that catches them will cut them to pieces.</div>';
   if(mine){
     // 4.4 minus 1 is 3.4000000000000004 in binary floating point, and it was being printed raw
-h+='<div class="meta">Sail left this turn: <b>'+(Math.round(fleetRange(f)*10)/10)+'</b> of '+shipSpeed(G.player)+' cells</div>';
+h+='<div class="meta">Sail left this turn: <b>'+(Math.round(fleetRange(f)*10)/10)+'</b> of '+(Math.round(vesselSpeed(f)*10)/10)+'</div>';
     if(f.ord&&SEA[f.ord]){
       const rest=seaFullPath(sid,f.ord,G.player);
       const legs=rest?rest.length-1:0;
@@ -5102,7 +5693,7 @@ h+='<div class="meta">Sail left this turn: <b>'+(Math.round(fleetRange(f)*10)/10
       h+='<div class="buildrow"><span>&#9973; Sailing on &mdash; '+legs+' cell'+(legs===1?'':'s')+' to go, about '+turns+' turn'+(turns===1?'':'s')+'</span><button onclick="holdFleet(\''+sid+'\')">Hold</button></div>';
     }
     const carried=loadCount(f);
-    h+='<div class="meta">Hold: '+carried+' / '+(f.n*SHIP_CAPACITY)+' troops</div>';
+    if(!tr)h+='<div class="meta">Hold: '+carried+' / '+(f.n*SHIP_CAPACITY)+' troops</div>';
     if(carried){
       h+='<table class="utable">';
       UKEYS.forEach(t=>{if(f.load[t])h+='<tr><td>'+uicon(t)+UNITS[t].name+'</td><td>'+f.load[t]+'</td></tr>';});
@@ -5115,10 +5706,16 @@ h+='<div class="meta">Sail left this turn: <b>'+(Math.round(fleetRange(f)*10)/10
         h+='<button style="width:100%;margin-top:6px" onclick="uiEmbark(\''+sid+'\',\''+cid+'\')">Take aboard '+cnt(a.u)+' troops from '+provOf(cellOf(cid).p).city+'</button>';
       });
       if(carried){
-        shoreLandCells(sid,G.player).slice(0,6).forEach(cid=>{
-          h+='<button style="width:100%;margin-top:6px" onclick="uiLand(\''+sid+'\',\''+cid+'\')">Land troops near '+provOf(cellOf(cid).p).city+'</button>';
+        // v6.4: landing is province to province like everything else now, and any coast will do
+        const shores=nodeLandProvs(sid).filter(pid=>!sealedBorder(CITYCELL[pid],G.player));
+        shores.slice(0,8).forEach(pid=>{
+          const own=ownerOf(pid);
+          const contested=own!==G.player&&(own==='neutral'||hostileTo(G.player,own));
+          h+='<button style="width:100%;margin-top:6px" onclick="uiLandProv(\''+sid+'\',\''+pid+'\')">'+
+             (contested?'&#9876; Storm ashore at ':'Land at ')+provOf(pid).city+
+             (contested?' ('+empName(own)+')':'')+'</button>';
         });
-        if(!shoreLandCells(sid,G.player).length)h+='<div class="meta">No open shore here to land on.</div>';
+        if(!shores.length)h+='<div class="meta">No shore here you may land on.</div>';
       }
     }
   }else{
@@ -5192,7 +5789,11 @@ function nearestReachableSea(clientX,clientY){
   const tol=34*perPx;                      // ~34 screen px, a thumb rather than a pixel
   let best=null,bestD=Infinity;
   for(const sid in G._seaTargets){
-    const s=SEA[sid]; if(!s)continue;
+    // a vessel mid-lane is drawn out on the water, nowhere near the node it is stored at, so the
+    // snap has to use its painted position or an interception would be untappable
+    const v=G.navy&&G.navy[sid];
+    const s=(v&&atSeaMidLane(v)&&seaXY(sid,v))||SEA[sid];
+    if(!s)continue;
     const d=Math.hypot(s.x-mx,s.y-my);
     if(d<bestD){bestD=d;best=sid;}
   }
@@ -5461,12 +6062,8 @@ try{
   }
 }catch(e){}
 
-
-
-
-
-
-
+// stamp the build on the setup screen
+(function(){const el=document.getElementById('verStamp');if(el)el.textContent='Age of Crowns '+GAME_VERSION;})();
 
 </script>
 </body>
