@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Age of Crowns v6.4</title>
+<title>Age of Crowns v7.0</title>
 <style>
 :root{
   --bg:#171310; --panel:#241d17; --panel2:#2e2620; --border:#5a4730;
@@ -455,7 +455,7 @@ h1,h2,h3{font-weight:normal}
     <h1>AGE OF CROWNS</h1>
     <div class="sub">A medieval game of world conquest &mdash; hold 60% of all provinces to win</div>
     <!-- so "is the uploaded copy the latest?" is answerable in one glance, without scrolling -->
-    <div id="verStamp" class="sub" style="margin-top:6px;opacity:.45;font-size:13px">Age of Crowns v6.4</div>
+    <div id="verStamp" class="sub" style="margin-top:6px;opacity:.45;font-size:13px">Age of Crowns v7.0</div>
     <h2>Choose your empire</h2>
     <div class="empgrid" id="empgrid"></div>
     <h2>Choose your rivals (2 to 5)</h2>
@@ -473,10 +473,10 @@ h1,h2,h3{font-weight:normal}
   <div id="hdr">
     <span class="title">AGE OF CROWNS</span>
     <span class="empbadge"><span class="dot" id="hEmpDot"></span><span id="hEmpName"></span></span>
-    <span class="stat">Gold: <b id="hGold">0</b> (<span id="hInc">+0</span>/turn)</span>
+    <span class="stat">Gold: <b id="hGold">0</b> (<span id="hInc">+0</span>/day)</span>
     <span class="stat">Cities: <b id="hProv">0</b>/80 (need 48)</span>
-    <span class="stat">Turn <b id="hTurn">1</b></span>
-    <span class="right"><button id="endTurn" class="primary">End turn</button></span>
+    <span class="stat"><b id="hTurn">Day 1, 00:00</b></span>
+    <span class="right"><button id="endTurn" class="primary">&#9199;</button></span>
   </div>
   <div id="main">
     <div id="rail">
@@ -639,6 +639,20 @@ const REC_DOMAINS=[
 // the road on top is what you pay for.
 const ROAD_KEY='__road:';          // buildQ entry b === ROAD_KEY + targetProvinceId
 const ROAD_COST=35, ROAD_TURNS=2;
+
+// ============ v7: the clock ============
+// Nabeel chose full Conflict of Nations pace and a persistent world. One number drives the lot:
+// MARCH_HOURS is how long foot take to cross one province of open country. Everything else falls
+// out of the cost and speed tables that already exist, and lands on the design doc's figures:
+//   foot 6h open / 3.6h on a road, horse 3h / 1.8h, siege engines 10h / 6h
+//   a galley crosses a median sea lane in 3h, a transport in 5h
+//   the world is 11 provinces across, so about 2.75 days wide on foot
+const MARCH_HOURS=6.0;
+const SEA_HOURS=6.0;
+const BUILD_DAY=24;            // one old build-or-training turn becomes one real day
+const TICK_H=0.25;             // the simulation resolves in quarter hours
+const ACT_COOLDOWN=6.0;        // a force that has fought is spent for this long
+const DAY_H=24;
 const ANNEX_KEY='__annex';                 // pass 4e: annexation occupies the same one-project-per-city slot
 const SIEGE_ATTR=[0.22,0.16,0.11,0.07];    // garrison starvation per turn by wall level
 
@@ -928,7 +942,7 @@ const CHIPTH=500;
 const HELP_HTML='<b>The goal</b><ul><li>Hold <b>48 of the 80 cities</b> to win.</li></ul><b>Moving armies</b><ul><li>Tap an army, choose how many troops to send in the bar, then tap where to go. Picking an army arms it &mdash; the <b>Choose target</b> button is only there if you want it.</li><li>Armies march <b>province to province</b> along the pale mesh. Foot make about one province a turn, horse two, siege engines less than one.</li><li>A <b>road</b> on a link is far quicker. You start with roads between your own homeland cities, so you move faster at home than an invader does.</li><li>Tap somewhere far and the army takes a <b>standing order</b> &mdash; it marches on its own each turn until it arrives.</li><li>Reaching a city takes the <b>whole province</b>, not one tile of it.</li></ul><b>Fighting</b><ul><li>Attacking a defended city offers <b>Assault</b> (fight now) or <b>Lay siege</b> (starve it out).</li><li>An assault fights several exchanges. If neither side breaks, your army falls back wounded &mdash; press again or regroup.</li><li>A <b>dashed ring</b> around a city means it is <b>under siege</b>. The ring is drawn in the besieging empire&rsquo;s colour, and tapping the city says who and for how long.</li><li>Units have hit points and armour. Wounds heal every turn, fastest inside your own cities.</li></ul><b>Columns on the road</b><ul><li>An army that ends its turn part-way along a leg is a <b>column</b> &mdash; strung out on the march, not formed for battle.</li><li>Anything of yours standing beside <b>either end</b> of that leg may <b>strike</b> it. Those cells glow <b>red</b> when you choose a target.</li><li>A column fights at &minus;40% and never fights to the last man: it breaks off and falls back to the ground it left.</li><li>What it really loses is the march &mdash; the crossing it had made and its standing order. Roads are fast, but a fast army is an exposed one.</li></ul><b>Cities</b><ul><li>Tier 1 troops can be raised anywhere you rule. Tier 2 and 3 need <b>buildings</b>: Barracks, Archery Range, Stables, and a Siege Workshop for any siege engine.</li><li>Buildings may only be raised in your <b>homeland</b>, or in a conquered city once you <b>annex</b> it.</li><li>A freshly conquered city pays half tribute for 5 turns while the unrest settles.</li><li>Walls toughen the garrison and slow a siege.</li></ul><b>The sea</b><ul><li><b>Port cities</b> build War Galleys from the Recruit tab. The galley appears on the water beside the city.</li><li>Fleets work exactly like armies: tap the fleet, then tap the sea you want. Tap an enemy fleet instead and you strike it.</li><li>Fleets sail 4 sea cells a turn, 6 once you have Admiralty. An enemy fleet blocks the way &mdash; you may strike it, but not sail past it.</li><li>Armies cross water by <b>boarding a fleet</b>: 3 troops per galley. Sail, then land them on a shore you choose. They cannot march the turn they come ashore.</li><li>An enemy fleet sitting on your harbour blockades it and stops you building ships there.</li></ul><b>Diplomacy</b><ul><li>You begin <b>at peace</b> with every crown. Their borders are sealed until you declare war from the <b>Diplomacy</b> panel.</li><li>Free lords &mdash; the grey cities &mdash; may be attacked at any time.</li><li>Enemy land is tinted red and hatched. Declaring war costs no gold, but every other crown thinks less of you.</li></ul><b>Research</b><ul><li>Two researches a turn. Each level adds 10% damage to its track.</li></ul>';
 // v5.6j: there was no version marker anywhere in the game, so "is the deployed file the current
 // one" could only ever be answered by diffing bytes. It is now on screen, at the foot of Help.
-const GAME_VERSION='v6.4';
+const GAME_VERSION='v7.0';
 // garrison strength band for cities you do not own (no exact numbers — Nabeel's fog rule)
 // jump straight to one of your cities
 let _toastT=null;
@@ -2375,28 +2389,34 @@ function startBuild(pid,b,empKey){
   return true;
 }
 
-function processBuilds(empKey){
+// The moment a project completes, split out of processBuilds so the clock can call it too.
+function finishBuild(pid,empKey){
   G.buildQ=G.buildQ||{};G.bld=G.bld||{};G.annex=G.annex||{};
+  const q=G.buildQ[pid];
+  if(!q)return;
+  if(typeof q.b==='string'&&q.b.indexOf(ROAD_KEY)===0){
+    const np=q.b.slice(ROAD_KEY.length);
+    G.roads=G.roads||{};
+    G.roads[provLinkKey(pid,np)]=1;
+    if(empKey===G.player)log('The road from <b>'+provOf(pid).city+'</b> to <b>'+provOf(np).city+'</b> is finished &mdash; your armies move faster along it.','');
+  }else if(q.b===ANNEX_KEY){
+    G.annex[pid]=empKey;               // recorded per empire, so retaking it later restores the annexation
+    if(empKey===G.player)log('<b>'+provOf(pid).city+'</b> is annexed into your realm — it may now raise buildings and train every tier.','turnmark');
+  }else{
+    G.bld[pid]=G.bld[pid]||{};
+    G.bld[pid][q.b]=(G.bld[pid][q.b]||0)+1;
+    if(empKey===G.player)log('The '+BLD[q.b].name+(G.bld[pid][q.b]>1?' (L'+G.bld[pid][q.b]+')':'')+' of <b>'+provOf(pid).city+'</b> is complete.','');
+  }
+  delete G.buildQ[pid];
+}
+
+function processBuilds(empKey){
+  G.buildQ=G.buildQ||{};
   for(const pid in G.buildQ){
     if(ownerOf(pid)!==empKey)continue;
     const q=G.buildQ[pid];
     q.left--;
-    if(q.left<=0){
-      if(typeof q.b==='string'&&q.b.indexOf(ROAD_KEY)===0){
-        const np=q.b.slice(ROAD_KEY.length);
-        G.roads=G.roads||{};
-        G.roads[provLinkKey(pid,np)]=1;
-        if(empKey===G.player)log('The road from <b>'+provOf(pid).city+'</b> to <b>'+provOf(np).city+'</b> is finished &mdash; your armies move faster along it.','');
-      }else if(q.b===ANNEX_KEY){
-        G.annex[pid]=empKey;               // recorded per empire, so retaking it later restores the annexation
-        if(empKey===G.player)log('<b>'+provOf(pid).city+'</b> is annexed into your realm — it may now raise buildings and train every tier.','turnmark');
-      }else{
-        G.bld[pid]=G.bld[pid]||{};
-        G.bld[pid][q.b]=(G.bld[pid][q.b]||0)+1;
-        if(empKey===G.player)log('The '+BLD[q.b].name+(G.bld[pid][q.b]>1?' (L'+G.bld[pid][q.b]+')':'')+' of <b>'+provOf(pid).city+'</b> is complete.','');
-      }
-      delete G.buildQ[pid];
-    }
+    if(q.left<=0)finishBuild(pid,empKey);
   }
 }
 
@@ -2408,7 +2428,8 @@ function newGame(playerKey,rivalKeys,diff){
   ensureGraph();
   G={turn:1,player:playerKey,emp:{},cellOwner:{},armies:{},log:[],selArmy:null,selCity:null,selSea:null,
      targeting:false,marchInfo:null,send:{},forced:false,over:false,diff:diff||'norm',animQ:[],
-     navy:{},seaTargeting:false,bld:{},buildQ:{},rec:{},train:{},occ:{},res:0,dip:{},annex:{}};
+     navy:{},seaTargeting:false,bld:{},buildQ:{},rec:{},train:{},occ:{},res:0,dip:{},annex:{},
+     col:{},_cid:0,t:0,rate:0};
   const persPool=['agg','bld','opp'];
   const players=[playerKey,...rivalKeys];
   players.forEach(k=>{
@@ -2588,18 +2609,39 @@ function marchPath5(fromCell,toCell,parent){
   return path;
 }
 
+// v7: there is no "as far as you can reach this turn" any more, because there is no turn. Every
+// province you can path to is a legal destination; what differs is how long it takes to get there.
+// The distances that come back are HOURS, and the interface shows them as such.
 function marchTargets5(cellId,force,forced){
   const army=G.armies[cellId];
-  const range=forceRange(army,force)+(forced?2:0);
-  const mm=marchMap5(cellId,army.e,range);
+  if(!army)return {targets:{},parent:{},range:0};
+  const spd=forceSpeed(army.e,cnt(force)?force:army.u);
+  const mm=marchMap5(cellId,army.e,1e9);
   const targets={};
   for(const k in mm.dist){
     if(k===cellId)continue;
-    targets[k]={d:mm.dist[k]};
+    targets[k]={d:mm.dist[k]*MARCH_HOURS/spd};      // movement cost becomes hours on the road
   }
-  // pass 5a: armies no longer teleport between the coasts of a shared sea zone. Water is
-  // crossed by boarding a fleet, so the only sea targets are the ones a ship provides.
-  return {targets,parent:mm.parent,range};
+  return {targets,parent:mm.parent,range:1e9,hours:true};
+}
+
+// How long this army would take to reach a cell, following the path it would actually walk.
+function hoursTo(cid,dest){
+  const a=G.armies[cid];
+  if(!a)return null;
+  const path=fullPathTo(cid,dest,a.e);
+  if(!path||path.length<2)return null;
+  let h=0;
+  for(let i=0;i+1<path.length;i++)h+=legHours(cid,path[i],path[i+1]);
+  if(a.to&&a.p)h-=a.p*legHours(cid,cid,a.to);
+  return Math.max(0,h);
+}
+function etaLabel(h){
+  if(h===null||h===undefined)return '';
+  if(h<1)return Math.max(1,Math.round(h*60))+' min';
+  if(h<24)return (h<10?h.toFixed(1):Math.round(h))+' hr';
+  const d=h/24;
+  return (d<10?d.toFixed(1):Math.round(d))+' days';
 }
 
 function takeForce5(cellId,want){
@@ -2645,7 +2687,7 @@ function seaXY(sid,f){
   return {x:c.x+(d.x-c.x)*k, y:c.y+(d.y-c.y)*k};
 }
 
-function onTheMarch(a){return !!(a&&a.to&&a.p>0);}
+function onTheMarch(a){return false;}   // v7: what marches is a column, never an army
 
 function clearLeg(a){if(a){delete a.to;delete a.p;}}
 
@@ -2653,16 +2695,17 @@ function onCityCell(cid){const c=cellOf(cid);return !!(c&&c.city);}
 
 function interceptTargets(fromCid,e){
   const out={};
+  const army=G.armies[fromCid];
+  if(!army||army.e!==e||spent(army))return out;
   const adj=moveAdj(fromCid);
   if(!adj.length)return out;
-  for(const cid in G.armies){
-    const col=G.armies[cid];
-    if(cid===fromCid||!onTheMarch(col))continue;
-    if(col.e===e||!hostileTo(e,col.e))continue;
-    if(onCityCell(cid))continue;                 // still behind its own walls
-    if(sealedBorder(cid,e))continue;             // a treaty's ground bars the strike
-    if(adj.includes(cid))out[cid]={d:0,icept:true,far:false};
-    else if(adj.includes(col.to))out[cid]={d:0,icept:true,far:true};
+  // v7: a force on the road is a column, not an army with a to/p pair, so this reads G.col.
+  for(const id in (G.col||{})){
+    const c=G.col[id];
+    if(c.e===e||!hostileTo(e,c.e))continue;
+    if(sealedBorder(c.from,e)&&sealedBorder(c.to,e))continue;   // a treaty's ground bars the strike
+    if(adj.includes(c.from))out[id]={d:0,icept:true,far:false,col:1};
+    else if(adj.includes(c.to))out[id]={d:0,icept:true,far:true,col:1};
   }
   return out;
 }
@@ -2809,12 +2852,15 @@ function damageColumn(col,raw,floor,ap){
 }
 
 function intercept5(fromCell,colCell,force,attackerKey,opts){
-  const col=G.armies[colCell];
+  // v7: what gets intercepted is a column, which lives in G.col and has its own id. Cell ids are
+  // still accepted so the sea and any older caller keep working.
+  const isCol=!!(G.col&&G.col[colCell]);
+  const col=isCol?G.col[colCell]:G.armies[colCell];
   const dmap=(opts&&opts.dmap)||{};
   const rep={fromCell,colCell,attackerKey,defOwner:col?col.e:'neutral',
-             attVolley:0,attLost:0,defLost:0,broke:false,icept:true,rounds:0};
-  if(!col||!cnt(col.u)){placeArmy(fromCell,attackerKey,force,99,false,dmap);return rep;}
-  if(G.animQ&&!(opts&&opts.noAnim))G.animQ.push({from:fromCell,to:colCell,e:attackerKey,t:domType(force)});
+             attVolley:0,attLost:0,defLost:0,broke:false,icept:true,rounds:0,col:isCol};
+  if(!col||!cnt(col.u)){placeArmy(fromCell,attackerKey,force,0,false,dmap);return rep;}
+  if(G.animQ&&!(opts&&opts.noAnim))G.animQ.push({from:fromCell,to:isCol?col.from:colCell,e:attackerKey,t:domType(force)});
   const att={u:force,d:dmap};
   const attStart=cnt(att.u), defStart=cnt(col.u);
   const floor=Math.max(1,Math.ceil(defStart*INTERCEPT_FLOOR));
@@ -2835,14 +2881,22 @@ function intercept5(fromCell,colCell,force,attackerKey,opts){
   rep.attLost=attStart-cnt(att.u);
   rep.defLost=defStart-cnt(col.u);
   rep.broke=cnt(col.u)<=floor;
-  // the survivors fall back onto the cell they still hold: leg lost, order cancelled, done for the turn
-  clearLeg(col);
+  // What is left of them is driven back onto the ground behind: the crossing is undone, the order
+  // is cancelled and they stand where they are until they have caught their breath.
   delete col.ord;
   delete col.siege;
-  col.mv=99;
+  coolDown(col);
   col.w=1;
-  if(!cnt(col.u))delete G.armies[colCell];       // belt and braces; the floor should prevent this
-  if(cnt(att.u))placeArmy(fromCell,attackerKey,att.u,99,false,att.d);   // the raiders keep their own ground
+  if(isCol){
+    col.p=0;                                     // pushed back to the end of the lane they started from
+    col.ord=col.from;
+    if(!cnt(col.u))delete G.col[colCell];
+    else landColumn(colCell,col.from);           // they fall out of column and stand on their own ground
+  }else{
+    clearLeg(col);
+    if(!cnt(col.u))delete G.armies[colCell];     // belt and braces; the floor should prevent this
+  }
+  if(cnt(att.u))placeArmy(fromCell,attackerKey,att.u,ACT_COOLDOWN,false,att.d);   // the raiders keep their own ground
   return rep;
 }
 
@@ -3228,52 +3282,31 @@ function aiInterceptPass(k,P,D){
 function aiArmyAct(k,cid,want,P,D){
   const tgt=nearestTargetCity(cid,k,7);
   if(!tgt)return false;
-  if(ownerOf(tgt.pid)===G.player&&G.turn<=D.grace)return false;
+  if(ownerOf(tgt.pid)===G.player&&gameDay()<=D.grace)return false;
   const army=G.armies[cid];
-  const info=marchTargets5(cid,want,false);
-  let dest=null;
-  if(info.targets[tgt.cell]){
+  if(!army||army.siege)return false;
+  // v7: an AI army no longer walks itself across the map every time it thinks. If it is beside
+  // the city it wants and strong enough, it goes in. Otherwise it cuts an order and the clock
+  // marches it there over real hours, the same as the player's columns.
+  if(moveAdj(cid).includes(tgt.cell)){
+    if(spent(army))return false;                       // still winded from its last action
     const gar=G.armies[tgt.cell];
     const Sa=strength(want,gar?gar.u:{},false,false,k);
     const Sd=Math.max(strength(gar?gar.u:{},want,true,!!provOf(tgt.pid).cap,gar?gar.e:'neutral'),0.2);
-    if(!gar||Sa/Sd>P.thr+D.thr)dest=tgt.cell;
-  }
-  if(!dest){
-    // Range is movement POINTS now, not a count of hops, so it cannot be used as a path index —
-    // path[3.4] is undefined, which silently killed the AI's advance after v5.6a part 1. Walk the
-    // path spending points, and let whatever is left ride as an order so the column keeps going
-    // next turn and can finish part-way along a leg like the player's does.
-    const path=marchPath5(cid,tgt.cell,tgt.parent);
-    if(path){
-      let budget=forceRange(army,want);
-      for(let i=1;i<path.length-1;i++){
-        const step=path[i];
-        const c=stepCost(path[i-1],step);
-        if(budget<c-0.001)break;
-        if(!info.targets[step]||(G.armies[step]&&G.armies[step].e!==k))break;
-        budget-=c; dest=step;
-      }
+    if(!gar||Sa/Sd>P.thr+D.thr){
+      delete army.ord;
+      const r=executeMarch(cid,tgt.cell,want,false,k);
+      if(r&&r.type==='battle'){logBattle5(r.rep);coolDown(G.armies[cid]);coolDown(G.armies[tgt.cell]);}
+      else if(r&&r.type==='intercept')logIntercept(r.rep);
+      return true;
     }
+    if(cnt(want)>=4&&Math.random()<0.35){layStartSiege(cid,tgt.cell,want,k);return true;}
+    return false;
   }
-  if(dest&&dest!==cid){
-    const r=executeMarch(cid,dest,want,false,k);
-    if(r&&r.type==='battle')logBattle5(r.rep);
-    else if(r&&r.type==='intercept')logIntercept(r.rep);
-    // keep marching next turn, and bank the leftover so the column stands on the road rather than
-    // snapping to a cell centre the way AI armies did before
-    const moved=G.armies[dest];
-    if(moved&&moved.e===k&&dest!==tgt.cell&&(!r||r.type!=='battle')){
-      moved.ord=tgt.cell;
-      aiBankLeftover(dest,k);
-    }
-    return true;
-  }
-  // couldn't win an assault this turn: if adjacent to the target city with a real force, dig in and besiege
-  if(info.targets[tgt.cell]&&moveAdj(cid).includes(tgt.cell)&&cnt(want)>=4&&Math.random()<0.6){
-    layStartSiege(cid,tgt.cell,want,k);
-    return true;
-  }
-  return false;
+  // One column per target city throttled the whole AI: many armies pick the same nearest city, so
+  // all but one of them stood still. Only stop it sending a second column out of the same cell.
+  if(colsOf(k).some(id=>G.col[id].from===cid&&(G.col[id].p||0)<0.15))return false;
+  return !!departColumn(cid,tgt.cell,want,k);        // the clock walks it there
 }
 
 function aiDiplomacy(k){
@@ -3320,13 +3353,10 @@ function aiTurn(k){
   const P=PERS[e.pers];
   const D=DIFFS[G.diff||'norm'];
   aiDiplomacy(k);
-  resolveSieges(k);
-  healArmies(k);
-  processBuilds(k);
-  processTraining(k);
-  tickOccupation(k);
-  armiesOf(k).forEach(c=>{if(G.armies[c])G.armies[c].w=0,G.armies[c].mv=0;});
-  e.gold+=Math.round(incomeOf(k)*D.inc);
+  // v7: healing, construction, training, occupation and income are the clock's job now. Doing them
+  // here as well meant every AI empire collected a day's income four times a day and finished its
+  // buildings four times as fast, which is how Byzantium took 48 cities in a week.
+  armiesOf(k).forEach(c=>{const a=G.armies[c];if(a)a.w=a.to?1:0;});
   const reserve=P.reserve+D.res;
   const prefs={agg:['blades','horse','siege','fletch','sea'],bld:['fletch','siege','blades','sea','horse'],opp:['horse','blades','fletch','sea','siege']}[e.pers];
   if(e.tech&&e.lastResearch!==G.turn){
@@ -3396,8 +3426,7 @@ function aiTurn(k){
   // Pass 5a keeps AI navies deliberately simple: raise a few galleys, strike an adjacent
   // enemy fleet when clearly stronger, otherwise hold station. Roaming navies are pass 5c,
   // and half-building them here would only be thrown away.
-  naviesOf(k).forEach(sid=>{G.navy[sid].mv=0;});
-  advanceNavyOrders(k);
+
   const ports=myProvs.filter(pid=>isPort(pid));
   let myFleet=0;naviesOf(k).forEach(sid=>{myFleet+=G.navy[sid].n;});
   if(ports.length&&e.gold>=SHIP.cost+20&&myFleet<4&&Math.random()<0.5){
@@ -3443,7 +3472,6 @@ function aiTurn(k){
   });
   aiLandTroops(k);                  // anyone who has arrived goes ashore before new orders are cut
   aiEmbark(k);                      // and an island power looks for a crossing worth making
-  advanceOrders(k);                 // AI columns under standing orders march on the same budget
   const list=armiesOf(k);
   const acted=new Set(aiInterceptPass(k,P,D));   // strike passing columns first; those armies are then spent
   list.forEach(cid=>{
@@ -3986,6 +4014,385 @@ function gameOver(win,msg){
   log(msg,'turnmark');
 }
 
+// ============================================================================
+// v7 — THE CLOCK
+// A persistent world at full Conflict of Nations pace. G.t is elapsed game hours and it is the
+// only clock there is; everything else is derived from it. Turns are gone. This layer is pure:
+// it changes state and returns, so a server can run it with no browser in sight.
+// ============================================================================
+
+function gameHours(){return G.t||0;}
+function gameDay(){return Math.floor(gameHours()/DAY_H)+1;}
+function hourOfDay(){return Math.floor(gameHours()%DAY_H);}
+function clockLabel(){
+  const h=hourOfDay();
+  return 'Day '+gameDay()+', '+(h<10?'0':'')+h+':00';
+}
+
+// How long a force takes to cross one link. The slowest unit sets the pace, exactly as the
+// movement-point version did, so a catapult still holds a column back.
+function forceSpeed(e,force){
+  let s=Infinity;
+  for(const t in force){ if(force[t])s=Math.min(s,spdOf(e,t)); }
+  return s===Infinity?1:Math.max(0.1,s);
+}
+function legHours(cid,from,to){
+  const a=G.armies[cid];
+  const spd=a?forceSpeed(a.e,a.u):1;
+  return MARCH_HOURS*stepCost(from,to)/spd;
+}
+function laneHours(f,a,b){
+  return SEA_HOURS*laneCost(a,b)/Math.max(0.1,vesselSpeed(f));
+}
+
+// `mv` used to be movement points spent this turn. It is now hours of cooldown left after
+// fighting: a force that has just been in action cannot immediately turn round and fight again.
+function spent(x){return !!(x&&(x.mv||0)>0.001);}
+function coolDown(x,h){ if(x)x.mv=Math.max(x.mv||0,h===undefined?ACT_COOLDOWN:h); }
+function tickCooldowns(h){
+  for(const cid in G.armies){const a=G.armies[cid];if(a&&a.mv)a.mv=Math.max(0,a.mv-h);}
+  for(const sid in (G.navy||{})){const f=G.navy[sid];if(f&&f.mv)f.mv=Math.max(0,f.mv-h);}
+}
+
+// ---- movement ----------------------------------------------------------------
+// Same shape as the old advanceOrders: walk the path, bank partial progress into to/p. The only
+// change is that the budget and the leg cost are both in hours now.
+function marchOrders(e,hours){
+  for(const startCid of armiesOf(e)){
+    let cur=startCid;
+    let live=G.armies[cur];
+    if(!live||!live.ord||live.e!==e||live.siege)continue;
+    let budget=hours;
+    let guard=0;
+    while(budget>1e-6&&guard++<40){
+      live=G.armies[cur];
+      if(!live||!live.ord)break;
+      const dest=live.ord;
+      const path=fullPathTo(cur,dest,e);
+      if(!path||path.length<2){delete live.ord;clearLeg(live);break;}
+      const nxt=path[1];
+      if(isBlockedCell(nxt,e)||sealedBorder(nxt,e)){
+        clearLeg(live);
+        if(nxt===dest)delete live.ord;      // arrived beside the target: let the player assault
+        break;
+      }
+      const legH=legHours(cur,cur,nxt);
+      const already=(live.to===nxt?(live.p||0):0)*legH;
+      const need=legH-already;
+      if(budget<need-1e-6){                  // still on the road when the tick ends
+        live.to=nxt;
+        live.p=Math.min(0.999,(already+budget)/legH);
+        budget=0;
+        break;
+      }
+      budget-=need;
+      clearLeg(live);
+      const force=takeForce5(cur,live.u);
+      if(!cnt(force))break;
+      if(G.animQ)G.animQ.push({from:cur,to:nxt,e,t:domType(force)});
+      placeArmy(nxt,e,force,0,false,G._takenD);
+      const moved=G.armies[nxt];
+      if(!moved)break;
+      clearLeg(moved);
+      if(nxt===dest){delete moved.ord;break;}
+      moved.ord=dest;
+      cur=nxt;
+    }
+  }
+}
+
+function sailOrders(e,hours){
+  naviesOf(e).forEach(sid=>{
+    let cur=sid;
+    let budget=hours, guard=0;
+    while(budget>1e-6&&guard++<40){
+      const f=navyAt(cur);
+      if(!f||f.e!==e)break;
+      if(f.to&&(!f.ord||f.ord===cur))clearLeg(f);     // a leg with no order behind it can never end
+      if(!f.ord||f.ord===cur)break;
+      const path=seaFullPath(cur,f.ord,e);
+      if(!path||path.length<2){delete f.ord;clearLeg(f);break;}
+      const nxt=path[1];
+      if(navyAt(nxt)&&navyAt(nxt).e!==e){clearLeg(f);break;}   // never barge into a hostile fleet
+      const legH=laneHours(f,cur,nxt);
+      const already=(f.to===nxt?(f.p||0):0)*legH;
+      const need=legH-already;
+      if(budget<need-1e-6){
+        f.to=nxt; f.p=Math.min(0.999,(already+budget)/legH);
+        budget=0; break;
+      }
+      budget-=need;
+      const dest=f.ord;
+      clearLeg(f);
+      const tgt=navyAt(nxt);
+      if(G.animQ)G.animQ.push({from:cur,to:nxt,e,t:'ship',sea:1});
+      if(tgt&&tgt.e===e){tgt.n+=f.n;mergeLoad(tgt,f);delete G.navy[cur];cur=nxt;}
+      else {G.navy[nxt]=f;delete G.navy[cur];cur=nxt;}
+      const now=navyAt(cur);
+      if(!now)break;
+      if(cur===dest){delete now.ord;delete now.sea;break;}
+      now.ord=dest;
+    }
+  });
+}
+
+// ---- the counters, now measured in hours -------------------------------------
+function tickBuilds(h){
+  G.buildQ=G.buildQ||{};G.bld=G.bld||{};G.annex=G.annex||{};
+  for(const pid in G.buildQ){
+    const q=G.buildQ[pid];
+    q.left-=h/BUILD_DAY;
+    if(q.left<=0)finishBuild(pid,ownerOf(pid));
+  }
+}
+function tickTraining(h){
+  G.train=G.train||{};
+  for(const pid in G.train){
+    const q=G.train[pid], owner=ownerOf(pid);
+    const done={};
+    for(let i=q.length-1;i>=0;i--){
+      q[i].left-=h/BUILD_DAY;
+      if(q[i].left<=0){done[q[i].t]=(done[q[i].t]||0)+1;q.splice(i,1);}
+    }
+    if(cnt(done)){
+      placeArmy(provOf(pid).citycell,owner,done,0,false,null,true);   // mustered, not marched
+      if(owner===G.player)log(cnt(done)+' fresh troop'+(cnt(done)>1?'s':'')+' muster in <b>'+provOf(pid).city+'</b>.','');
+    }
+    if(!q.length)delete G.train[pid];
+  }
+}
+function tickHeal(h){
+  const frac=h/DAY_H;                       // the old per-turn rates now apply per day
+  for(const cid in G.armies){
+    const a=G.armies[cid];
+    if(!a||!a.d)continue;
+    const own=cellOwnerOf(cid)===a.e;
+    const rate=(cellOf(cid).city&&own?0.5:(own?0.25:0.1))*frac;
+    for(const t in a.d){
+      a.d[t]=Math.max(0,a.d[t]-UNITS[t].hp*rate);
+      if(!a.d[t])delete a.d[t];
+    }
+  }
+}
+function tickIncome(h){
+  const frac=h/DAY_H;                       // a day pays what a turn used to
+  for(const k in G.emp){
+    const e=G.emp[k];
+    if(!e.alive)continue;
+    const mult=e.ai?(DIFFS[G.diff||'norm'].inc||1):1;   // the AI's handicap rides on the clock now
+    e.purse=(e.purse||0)+incomeOf(k)*mult*frac;
+    const whole=Math.floor(e.purse);
+    if(whole>0){e.gold+=whole;e.purse-=whole;}
+  }
+}
+function tickOccupationHours(h){
+  G.occ=G.occ||{};
+  for(const pid in G.occ){
+    G.occ[pid]-=h/DAY_H;
+    if(G.occ[pid]<=0){
+      const o=ownerOf(pid);
+      delete G.occ[pid];
+      if(o===G.player)log('<b>'+provOf(pid).city+'</b> has settled under your rule &mdash; full tribute resumes.','');
+    }
+  }
+}
+function tickDiplomacyHours(h){
+  sweepGhostFleets();
+  G.dip=G.dip||{};
+  const frac=h/DAY_H;
+  for(const k in G.dip){
+    const d=G.dip[k];
+    if(d.truce>0)d.truce=Math.max(0,d.truce-frac);
+    if(d.state==='peace'&&d.rel<50)d.rel=Math.min(50,d.rel+frac);
+  }
+}
+
+// ---- the AI, staggered -------------------------------------------------------
+// It used to play every empire on the same instant, once per turn. In a persistent world that
+// would mean the whole board deciding at once, several times a day. Each empire instead gets its
+// own thinking interval and its own offset, so decisions land spread across the clock.
+const AI_THINK_H=6.0;
+function aiNextAt(k,i){
+  return (G._aiAt&&G._aiAt[k]!==undefined)?G._aiAt[k]:(i*AI_THINK_H/8);
+}
+function tickAI(){
+  G._aiAt=G._aiAt||{};
+  const keys=Object.keys(G.emp);
+  keys.forEach((k,i)=>{
+    if(!G.emp[k].alive||k===G.player)return;
+    if(G._aiAt[k]===undefined)G._aiAt[k]=i*(AI_THINK_H/Math.max(1,keys.length));
+    while(G._aiAt[k]<=gameHours()&&!G.over){
+      G._aiAt[k]+=AI_THINK_H;
+      try{aiThink(k);}catch(e){}
+    }
+  });
+}
+
+// One AI decision point. The old aiTurn did movement itself; the clock owns movement now, so this
+// is the deciding half only: raise troops, build, sail, strike, and cut new orders.
+function aiThink(k){
+  aiTurn(k);
+}
+
+// ---- one tick ----------------------------------------------------------------
+function tickWorld(h){
+  G.t=(G.t||0)+h;
+  tickCooldowns(h);
+  tickColumns(h);
+  for(const k in G.emp){
+    if(!G.emp[k].alive)continue;
+    resolveSieges(k);
+    sailOrders(k,h);
+  }
+  tickBuilds(h);
+  tickTraining(h);
+  tickHeal(h);
+  tickIncome(h);
+  tickOccupationHours(h);
+  tickDiplomacyHours(h);
+  tickAI();
+  const d=gameDay();
+  if(d!==G._lastDay){                       // allowances refresh once a day, as a turn used to
+    G._lastDay=d;
+    G.rec={};
+    G.res=0;
+    growNeutrals();
+    G.turn=d;                               // kept in step so old code and old saves still read
+  }
+}
+
+// Advance the world by however long has passed. Fixed steps so events always land in the same
+// order regardless of how long the player was away: an hour of catch-up and an hour watched live
+// produce the same world.
+function advanceClock(hours){
+  let left=Math.max(0,hours);
+  let guard=0;
+  while(left>1e-6&&guard++<200000){
+    const step=Math.min(TICK_H,left);
+    tickWorld(step);
+    left-=step;
+    if(G.over)break;
+  }
+  return gameHours();
+}
+
+// Catch up from a wall-clock timestamp. The server calls this on connect, and single player calls
+// it on load, so a world left running behaves the same either way.
+function catchUpTo(realMsNow){
+  if(!G._realAt){G._realAt=realMsNow;return 0;}
+  const hours=(realMsNow-G._realAt)/3600000*(G.rate||1);
+  G._realAt=realMsNow;
+  if(hours<=0)return 0;
+  advanceClock(hours);
+  return hours;
+}
+
+// ============================================================================
+// v7 — COLUMNS ON THE ROAD
+// An army used to be keyed by the cell it stood on, and a force part way between two cells was
+// stored at its origin with a to/p pair. That works when only one force can leave a province,
+// which is true in a turn-based game and false the moment time is continuous: send seven and keep
+// three, and both need somewhere to exist. So a moving force is now its own object with its own
+// id. G.armies holds what is standing still; G.col holds what is on the road.
+// ============================================================================
+
+function newColId(){G._cid=(G._cid||0)+1;return 'c'+G._cid;}
+function colsOf(e){const o=[];for(const id in (G.col||{}))if(G.col[id].e===e)o.push(id);return o;}
+function colHours(c){
+  return MARCH_HOURS*stepCost(c.from,c.to)/forceSpeed(c.e,c.u);
+}
+function colXY(c){
+  const A=cellOf(c.from), B=cellOf(c.to);
+  if(!A)return null;
+  if(!B)return {x:A.x,y:A.y};
+  const k=Math.max(0,Math.min(1,c.p||0));
+  return {x:A.x+(B.x-A.x)*k, y:A.y+(B.y-A.y)*k};
+}
+function colProv(c){return CELLPROV[c.from];}
+
+// Set a force on the road. Returns the column id, or null if it cannot start.
+function departColumn(fromCid,dest,want,e){
+  const army=G.armies[fromCid];
+  if(!army||army.e!==e)return null;
+  if(dest===fromCid)return null;
+  const path=fullPathTo(fromCid,dest,e);
+  if(!path||path.length<2)return null;
+  const nxt=path[1];
+  if(sealedBorder(nxt,e))return null;
+  const force=takeForce5(fromCid,want&&cnt(want)?want:army.u);
+  if(!cnt(force))return null;
+  const id=newColId();
+  G.col=G.col||{};
+  G.col[id]={e,u:force,d:G._takenD&&cnt(G._takenD)?G._takenD:null,
+             from:fromCid,to:nxt,p:0,ord:dest,mv:0,w:1};
+  return id;
+}
+
+// A column that has arrived stops being a column and joins whatever is standing there.
+function landColumn(id,cid){
+  const c=G.col[id];
+  if(!c)return null;
+  delete G.col[id];
+  placeArmy(cid,c.e,c.u,c.mv||0,1,c.d);
+  return cid;
+}
+
+// One column, one tick.
+function stepColumn(id,h){
+  const c=G.col&&G.col[id];
+  if(!c)return;
+  if(c.mv>0)c.mv=Math.max(0,c.mv-h);          // a column that has just fought stands a while
+  const legH=colHours(c);
+  c.p=(c.p||0)+h/Math.max(0.01,legH);
+  if(c.p<1)return;
+  const arrive=c.to;
+  const foe=G.armies[arrive];
+  // something hostile is standing there: this is an assault, and it is where the column stops
+  const hostile=(foe&&foe.e!==c.e&&hostileTo(c.e,foe.e))||
+                (!foe&&cellOf(arrive).city&&(()=>{const o=ownerOf(CELLPROV[arrive]);return o!==c.e&&(o==='neutral'||hostileTo(c.e,o));})());
+  if(hostile){
+    const force=c.u, dmap=c.d;
+    delete G.col[id];
+    const rep=battle5(c.from,arrive,force,c.e,{dmap:dmap||{},noAnim:1});
+    if(rep){
+      logBattle5(rep);
+      const won=G.armies[arrive];
+      if(won&&won.e===c.e)coolDown(won);
+      const back=G.armies[c.from];
+      if(back&&back.e===c.e)coolDown(back);
+    }
+    return;
+  }
+  if(foe&&foe.e!==c.e){                        // a neighbour we are at peace with: stop short
+    c.p=0.999;
+    delete c.ord;
+    return;
+  }
+  if(arrive===c.ord){landColumn(id,arrive);return;}
+  // still going: pick up the next leg without ever standing still, so passing through a friendly
+  // city does not quietly absorb the column into its garrison
+  const path=fullPathTo(arrive,c.ord,c.e);
+  if(!path||path.length<2){landColumn(id,arrive);return;}
+  const nxt=path[1];
+  if(sealedBorder(nxt,c.e)||(G.armies[nxt]&&G.armies[nxt].e!==c.e&&!hostileTo(c.e,G.armies[nxt].e))){
+    landColumn(id,arrive);return;
+  }
+  claimCell(arrive,c.e);
+  c.from=arrive; c.to=nxt; c.p=0;
+}
+
+function tickColumns(h){
+  for(const id of Object.keys(G.col||{}))stepColumn(id,h);
+}
+
+// Tell a column to stop. It finishes the crossing it is on rather than turning round in a river.
+function haltColumn(id){
+  const c=G.col&&G.col[id];
+  if(!c)return false;
+  c.ord=c.to;
+  return true;
+}
+
 // ==================== INTERFACE — browser only ====================
 // Generated by tools/split.mjs from the single-file game. Edit THIS file, then run build.mjs.
 function buyUnit5(pid,t){
@@ -4215,6 +4622,7 @@ function playAnims(done){
 
 function saveGame(){
   if(!G||G.over)return;
+  G._wall=Date.now();
   try{localStorage.setItem('aoc5save',JSON.stringify(G));}catch(e){}
 }
 
@@ -4256,6 +4664,10 @@ function loadGame(){
   G.bld=G.bld||{};G.buildQ=G.buildQ||{};G.rec=G.rec||{};   // pre-3b saves gain building state
   G.train=G.train||{};G.occ=G.occ||{};G.res=G.res||0;      // pre-4a saves gain training/occupation state
   if(!G.dip){G.dip={};const ks=Object.keys(G.emp);ks.forEach(a=>ks.forEach(b=>{if(a!==b)dipOf(a,b);}));}  // pre-4b saves start at peace
+  // v7: a turn-based save has no clock. Start it at the day its turn counter had reached, so an
+  // old game carries on rather than snapping back to the first morning.
+  if(G.t===undefined){G.t=Math.max(0,((G.turn||1)-1))*DAY_H;G.rate=0;}
+  if(G.rate===undefined)G.rate=0;
   if(!Object.keys(G.bld).length){for(const k in G.emp)if(EMPIRES[k])G.bld[EMPIRES[k].cap]={barracks:1,range:1,stables:1};}
   buildCadj();
   $('start').style.display='none';
@@ -4271,6 +4683,9 @@ function loadGame(){
   VB.w=MAPD5.W/3;VB.h=MAPD5.H/3;
   VB.x=cap.cx-VB.w/2;VB.y=cap.cy-VB.h/2;
   applyVB();fitAspect();
+  startClock();
+  catchUpOnLoad();      // the world kept running while the app was shut
+  renderAll();
   return true;
 }
 
@@ -4492,9 +4907,21 @@ function updateMap(){
   // city label carries the city on its own.
   const GAR_SHOW=VB.w<=760;
   let ah='';
+  // v7: two kinds of force are drawn the same way. G.armies is what is standing still, G.col is
+  // what is on the road, and a column is painted between the two provinces it is crossing.
+  const drawUnits=[];
   for(const cid in G.armies){
-    const a=G.armies[cid];
     const cc=MAPD5.cells[cid];
+    if(cc)drawUnits.push({key:cid,a:G.armies[cid],cc,isCol:0});
+  }
+  for(const id in (G.col||{})){
+    const c0=G.col[id], xy=colXY(c0);
+    if(xy)drawUnits.push({key:id,a:c0,cc:MAPD5.cells[c0.from],isCol:1,xy});
+  }
+  for(const it of drawUnits){
+    const cid=it.key;
+    const a=it.a;
+    const cc=it.cc;
     if(!cc)continue;
     // v5.6h: a garrison used to be drawn NOWHERE — folded into the city label as "Frankfurt (10)"
     // and invisible on the map, so you could not see what held a city, or tell a stack of knights
@@ -4502,16 +4929,16 @@ function updateMap(){
     // standing BESIDE the city. A garrison is now drawn exactly like a field army, anchored to the
     // city pin (which sits up to 54 map units off the cell centre) and offset clear of the hex and
     // its label, so the city and the troops holding it read as two separate things.
-    const inCity=!!cc.city&&!onTheMarch(a);
+    const inCity=!!cc.city&&!it.isCol;
     if(inCity&&!GAR_SHOW)continue;              // zoomed out: the city label's count carries it
-    let c=unitXY(cid,a)||cc;
+    let c=it.isCol?it.xy:(unitXY(cid,a)||cc);
     if(inCity){const pvc=provOf(cc.p); if(pvc)c={x:pvc.cx+GAR_DX*s, y:pvc.cy+GAR_DY*s};}
     const tot=cnt(a.u);
     if(!tot)continue;
     const col=empColor(a.e);
     const dt=domType(a.u);
-    const sel=G.selArmy===cid;
-    ah+='<g class="armyfig" data-a="'+cid+'">';
+    const sel=(it.isCol?G.selCol:G.selArmy)===cid;
+    ah+='<g class="armyfig'+(it.isCol?' oncol':'')+'" data-a="'+cid+'"'+(it.isCol?' data-col="1"':'')+'>';
     ah+='<circle cx="'+c.x+'" cy="'+c.y+'" r="'+(16*s)+'" fill="transparent"/>';
     if(sel){
       const rr=21*s;
@@ -4543,7 +4970,10 @@ function updateMap(){
       ah+='<rect x="'+(c.x+11*s)+'" y="'+(c.y-6*s)+'" width="'+(24*s)+'" height="'+(14*s)+'" rx="'+(3.5*s)+'" fill="'+col+'" stroke="#241d17" stroke-width="'+(0.9*s)+'"/>';
       ah+='<text x="'+(c.x+23*s)+'" y="'+(c.y+4.5*s)+'" font-size="'+(9.5*s)+'" font-weight="bold" fill="#fff" text-anchor="middle" style="paint-order:stroke;stroke:#241d17;stroke-width:'+(1.8*s)+'px">'+tot+'</text>';
     }
-    if(a.w)ah+='<text x="'+(c.x-20*s)+'" y="'+(c.y+14*s)+'" font-size="'+(10*s)+'" font-weight="bold" fill="#c94040" style="paint-order:stroke;stroke:#241d17;stroke-width:'+(2*s)+'px">~</text>';
+    if(it.isCol){                                  // a column reads as moving, not as a garrison
+      ah+='<path d="M'+(c.x-13*s)+' '+(c.y+15*s)+' L'+(c.x+13*s)+' '+(c.y+15*s)+'" stroke="'+col+
+          '" stroke-width="'+(2.2*s)+'" stroke-linecap="round" stroke-dasharray="'+(3*s)+' '+(2.5*s)+'" opacity="0.9"/>';
+    }else if(a.w)ah+='<text x="'+(c.x-20*s)+'" y="'+(c.y+14*s)+'" font-size="'+(10*s)+'" font-weight="bold" fill="#c94040" style="paint-order:stroke;stroke:#241d17;stroke-width:'+(2*s)+'px">~</text>';
     ah+='</g>';
   }
   // Besieged-city rings. v5.6e: these were a generic red dashed hex with nothing anywhere to say
@@ -4635,7 +5065,7 @@ function renderHdr(){
   $('hGold').textContent=e.gold;
   $('hInc').textContent='+'+incomeOf(G.player);
   $('hProv').textContent=provsOf(G.player).length;
-  $('hTurn').textContent=G.turn;
+  $('hTurn').textContent=clockLabel();
 }
 
 function paintLog(){
@@ -4716,6 +5146,16 @@ function offerWar(k,reason,after){
 
 function armyClick(cid){
   if(G.over)return;
+  // v7: the same tap target now covers columns as well as garrisons. A column is an interception
+  // target when you have an army selected, and otherwise it is just a thing you can look at.
+  if(G.col&&G.col[cid]){
+    if(G.selArmy&&G.marchInfo&&G.marchInfo.targets[cid]){cellClick(cid);return;}
+    G.selArmy=null;G.selCity=null;G.selSea=null;G.selCol=cid;
+    G.targeting=false;G.marchInfo=null;
+    renderAll();openColumnPanel(cid);
+    return;
+  }
+  G.selCol=null;
   if(G.targeting&&G.selArmy&&G.marchInfo&&G.marchInfo.targets[cid]){cellClick(cid);return;}
   // v5.6j: an enemy stack you are at peace with is not a legal target, so it never appeared in
   // marchInfo.targets and the tap fell through to "select that army" — a dead end in the info
@@ -4900,8 +5340,25 @@ function doIntercept(from,cid,want){
 }
 
 function doMarch(from,cid,want,forced){
-  if(G.armies[from]){delete G.armies[from].ord;delete G.armies[from].siege;}
+  const a=G.armies[from];
+  if(!a)return;
+  delete a.ord; delete a.siege;
+  const adjacent=moveAdj(from).includes(cid);
+  const icept=!!(G.marchInfo&&G.marchInfo.targets[cid]&&G.marchInfo.targets[cid].icept);
+  // v7: a distant destination is an ORDER, not a move. The clock walks the column there over real
+  // hours. Only something next door resolves now, and only an attack or an interception does.
+  if(!adjacent&&!icept){
+    const h=hoursTo(from,cid);
+    const id=departColumn(from,cid,want,G.player);
+    G.targeting=false;G.marchInfo=null;G.send={};
+    if(!id){toast('No road that way.');renderAll();return;}
+    G.selArmy=G.armies[from]?from:null; G.selCol=id;
+    log('Your column marches for <b>'+provOf(cellOf(cid).p).city+'</b> &mdash; about '+etaLabel(h)+' on the road.','');
+    renderAll();openColumnPanel(id);saveGame();
+    return;
+  }
   const r=executeMarch(from,cid,want,forced,G.player);
+  coolDown(G.armies[from]); coolDown(G.armies[cid]);
   G.targeting=false;G.marchInfo=null;
   G.selArmy=(r&&(r.type==='intercept'||(r.type==='battle'&&!r.rep.win)))
     ?(G.armies[from]?from:null)
@@ -4936,6 +5393,43 @@ function doMarch(from,cid,want,forced){
     if(G.selArmy)openArmyPanel(G.selArmy);
     saveGame();
   });
+}
+
+// v7: a column on the road gets its own panel. Yours tells you where it is going and how long is
+// left; theirs tells you only what a scout could see.
+function openColumnPanel(id){
+  const c=G.col&&G.col[id];
+  if(!c){closeDrawer();return;}
+  const A=provOf(CELLPROV[c.from]), B=provOf(CELLPROV[c.to]);
+  const mine=c.e===G.player;
+  const legH=colHours(c)*(1-(c.p||0));
+  let h='<div class="meta">'+empName(c.e)+' &middot; on the road from <b>'+(A?A.city:'?')+'</b> to <b>'+(B?B.city:'?')+'</b></div>';
+  if(mine){
+    const dest=provOf(CELLPROV[c.ord]);
+    const left=hoursTo(c.from,c.ord);
+    h+='<div class="meta">'+armyStr(c.u)+'</div>';
+    h+='<div class="meta">Making for <b>'+(dest?dest.city:'?')+'</b>'+
+       (left!==null?' &mdash; about '+etaLabel(left):'')+'</div>';
+    h+='<div class="meta">Next province in '+etaLabel(legH)+'</div>';
+    h+='<div class="meta" style="color:var(--danger)">&#9888; A column on the road can be struck from either end of it and cannot form a line to answer.</div>';
+    h+='<button class="primary" onclick="uiHaltColumn(\''+id+'\')">Halt at '+(B?B.city:'the next province')+'</button>';
+  }else{
+    const bnd=garrisonBand(cnt(c.u));
+    h+='<div class="meta" style="font-size:15px">Strength: <b style="color:'+bnd.cls+'">'+bnd.txt+'</b> '+
+       '<span style="color:'+bnd.cls+';letter-spacing:2px">'+bandGlyph(cnt(c.u))+'</span></div>';
+    h+='<div class="meta">They are strung out on the march. An army of yours beside either end of that road can cut them down.</div>';
+  }
+  $('panel').innerHTML=h;
+  showDrawer(mine?'Your column on the road':empName(c.e)+' column');
+}
+
+function uiHaltColumn(id){
+  if(haltColumn(id)){
+    const c=G.col[id];
+    const B=c?provOf(CELLPROV[c.to]):null;
+    log('Your column will halt at <b>'+(B?B.city:'the next province')+'</b>.','');
+    renderAll();openColumnPanel(id);saveGame();
+  }
 }
 
 function openArmyPanel(cid){
@@ -5461,54 +5955,75 @@ function showStandings(){
   showModal('Standings &mdash; turn '+G.turn,h,[['Close',closeModal,'primary']]);
 }
 
-function endTurn(){
-  if(G.over)return;
-  if(!G._skipMoveWarn&&playerCanStillMove()){
-    const movable=playerMovableArmies();
-    let lst='<div class="meta">These armies can still move or attack this turn (click one to jump to it):</div>';
-    movable.slice(0,8).forEach(c=>{
-      const a=G.armies[c];
-      const pv=provOf(cellOf(c).p);
-      lst+='<button style="display:block;width:100%;margin-top:4px;text-align:left" onclick="jumpToArmy(\''+c+'\')">'+(cellOf(c).city?'Garrison of ':'Army near ')+pv.city+' &mdash; '+cnt(a.u)+' troops</button>';
-    });
-    if(movable.length>8)lst+='<div class="meta">&hellip;and '+(movable.length-8)+' more.</div>';
-    showModal('End turn?',lst,
-      [['End turn anyway',()=>{closeModal();G._skipMoveWarn=true;endTurn();G._skipMoveWarn=false;},'primary'],['Keep playing',closeModal,'']]);
-    return;
-  }
-  $('endTurn').disabled=true;
-  G.animQ=[];
-  try{Object.keys(G.emp).forEach(k=>{if(k!==G.player)aiTurn(k);});}
-  catch(e){console.error('AI turn error:',e);}
-  playAnims(()=>{
-    if(!G.over){
-      G.turn++;
-      armiesOf(G.player).forEach(c=>{G.armies[c].mv=0;G.armies[c].w=0;});
-      naviesOf(G.player).forEach(sid=>{G.navy[sid].mv=0;});
-      G.animQ=[];
-      resolveSieges(G.player);
-      advanceOrders(G.player);
-      advanceNavyOrders(G.player);     // fleets carry on toward their destination too
-      healArmies(G.player);            // wounds mend: cities 50%, own land 25%, abroad 10%
-      processBuilds(G.player);         // construction advances
-      processTraining(G.player);       // recruits finish training
-      growNeutrals();                  // free lords raise troops and fortify
-      tickOccupation(G.player);        // captured cities settle toward full income
-      tickDiplomacy();                 // truces expire, memories fade
-      G.rec={};                        // fresh recruit cap each turn
-      G.res=0;                         // research allowance refreshes
-      G.emp[G.player].gold+=incomeOf(G.player);
-      log('Turn '+G.turn+' — your coffers grow by '+incomeOf(G.player)+' gold.','turnmark');
-    }
-    // play the post-turn marches/sieges instead of leaving them queued for the next action
-    playAnims(()=>{
-      $('endTurn').disabled=false;
-      G.targeting=false;G.marchInfo=null;
-      renderAll();
-      saveGame();
-    });
-  });
+// ==================== v7: the clock replaces the turn ====================
+// There is no end of turn any more. The world runs on real hours and this is the only thing
+// driving it: a ticker that asks the rules how much time has passed and lets them resolve it.
+// The rate exists because full CoN pace means a province takes six real hours, which is right for
+// a persistent world and impossible to test in. On a server the rate is pinned to 1.
+const RATES=[0,1,60,600,3600];
+const RATE_LBL=['Paused','Real time','1 min = 1 hr','1 sec = 10 min','1 sec = 1 hr'];
+let _tickAt=0, _tickTimer=null;
+
+function rateIdx(){return Math.max(0,RATES.indexOf(G&&G.rate!==undefined?G.rate:0));}
+function setRate(i){
+  if(!G)return;
+  G.rate=RATES[(i%RATES.length+RATES.length)%RATES.length];
+  _tickAt=Date.now();
+  paintClock();
+  saveGame();
 }
+function cycleRate(){setRate(rateIdx()+1);}
+function paintClock(){
+  const b=$('endTurn');
+  if(!b)return;
+  const i=rateIdx();
+  b.textContent=G.rate?('\u25B6 '+G.rate+'\u00D7'):'\u23F8';
+  b.title=RATE_LBL[i];
+  b.classList.toggle('paused',!G.rate);
+  const l=$('rateLbl');
+  if(l)l.textContent=RATE_LBL[i];
+}
+
+function clockTick(){
+  if(!G||G.over||!G.rate){_tickAt=Date.now();return;}
+  const now=Date.now();
+  const hours=(now-_tickAt)/3600000*G.rate;
+  _tickAt=now;
+  if(hours<=0)return;
+  const before=provsOf(G.player).length;
+  G.animQ=[];
+  try{advanceClock(hours);}catch(e){console.error('clock:',e);}
+  renderAll();
+  if(provsOf(G.player).length!==before)saveGame();
+  if(G.over)paintOutcome();
+}
+
+function startClock(){
+  _tickAt=Date.now();
+  if(_tickTimer)clearInterval(_tickTimer);
+  _tickTimer=setInterval(clockTick,500);
+  // a phone that sleeps must not silently swallow the hours it was away
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)_tickAt=Date.now();});
+  paintClock();
+}
+
+// A long absence is caught up in one go rather than replayed at the tick rate, so a world left
+// running behaves the same whether you watched it or not.
+function catchUpOnLoad(){
+  if(!G)return;
+  const now=Date.now();
+  if(G._wall&&G.rate){
+    const hours=(now-G._wall)/3600000*G.rate;
+    if(hours>0.01){
+      const d0=gameDay();
+      advanceClock(Math.min(hours,24*30));
+      const passed=gameDay()-d0;
+      if(passed>0)log('While you were away, '+passed+' day'+(passed>1?'s':'')+' passed.','turnmark');
+    }
+  }
+  G._wall=now;
+}
+
 
 function cancelOrder(cid){
   if(G.armies[cid])delete G.armies[cid].ord;
@@ -5989,8 +6504,10 @@ function buildStart(){
     // It ran the other way round and every new game started with zero roads.
     buildCadj();
     newGame(selEmpire,[...selRivals],selDiff);
+    G.t=0; G.rate=0;                       // the world starts paused, so you can look before it moves
     initMap();
     initInput();
+    startClock();
     if(window.innerWidth<761){$('mapwrap').classList.remove('tilted');setRailLbl('tiltBtn','Tilt: off');}   // the 3D tilt softens the map on small screens
     renderAll();
     saveGame();
@@ -6024,7 +6541,7 @@ function syncAppHeight(){
 // ==================== BOOT — browser only, runs at load ====================
 // Generated by tools/split.mjs from the single-file game. Edit THIS file, then run build.mjs.
 const $=id=>document.getElementById(id);
-$('endTurn').addEventListener('click',endTurn);
+$('endTurn').addEventListener('click',cycleRate);   // v7: there is no end of turn any more
 $('unitsBtn').addEventListener('click',showUnitCards);
 $('techBtn').addEventListener('click',showTech);
 $('animBtn').addEventListener('click',()=>{ANIM_ON=!ANIM_ON;setRailLbl('animBtn','Motion: '+(ANIM_ON?'on':'off'));});
