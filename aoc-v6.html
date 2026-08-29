@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Age of Crowns v7.0</title>
+<title>Age of Crowns v7.0a</title>
 <style>
 :root{
   --bg:#171310; --panel:#241d17; --panel2:#2e2620; --border:#5a4730;
@@ -455,7 +455,7 @@ h1,h2,h3{font-weight:normal}
     <h1>AGE OF CROWNS</h1>
     <div class="sub">A medieval game of world conquest &mdash; hold 60% of all provinces to win</div>
     <!-- so "is the uploaded copy the latest?" is answerable in one glance, without scrolling -->
-    <div id="verStamp" class="sub" style="margin-top:6px;opacity:.45;font-size:13px">Age of Crowns v7.0</div>
+    <div id="verStamp" class="sub" style="margin-top:6px;opacity:.45;font-size:13px">Age of Crowns v7.0a</div>
     <h2>Choose your empire</h2>
     <div class="empgrid" id="empgrid"></div>
     <h2>Choose your rivals (2 to 5)</h2>
@@ -942,7 +942,7 @@ const CHIPTH=500;
 const HELP_HTML='<b>The goal</b><ul><li>Hold <b>48 of the 80 cities</b> to win.</li></ul><b>Moving armies</b><ul><li>Tap an army, choose how many troops to send in the bar, then tap where to go. Picking an army arms it &mdash; the <b>Choose target</b> button is only there if you want it.</li><li>Armies march <b>province to province</b> along the pale mesh. Foot make about one province a turn, horse two, siege engines less than one.</li><li>A <b>road</b> on a link is far quicker. You start with roads between your own homeland cities, so you move faster at home than an invader does.</li><li>Tap somewhere far and the army takes a <b>standing order</b> &mdash; it marches on its own each turn until it arrives.</li><li>Reaching a city takes the <b>whole province</b>, not one tile of it.</li></ul><b>Fighting</b><ul><li>Attacking a defended city offers <b>Assault</b> (fight now) or <b>Lay siege</b> (starve it out).</li><li>An assault fights several exchanges. If neither side breaks, your army falls back wounded &mdash; press again or regroup.</li><li>A <b>dashed ring</b> around a city means it is <b>under siege</b>. The ring is drawn in the besieging empire&rsquo;s colour, and tapping the city says who and for how long.</li><li>Units have hit points and armour. Wounds heal every turn, fastest inside your own cities.</li></ul><b>Columns on the road</b><ul><li>An army that ends its turn part-way along a leg is a <b>column</b> &mdash; strung out on the march, not formed for battle.</li><li>Anything of yours standing beside <b>either end</b> of that leg may <b>strike</b> it. Those cells glow <b>red</b> when you choose a target.</li><li>A column fights at &minus;40% and never fights to the last man: it breaks off and falls back to the ground it left.</li><li>What it really loses is the march &mdash; the crossing it had made and its standing order. Roads are fast, but a fast army is an exposed one.</li></ul><b>Cities</b><ul><li>Tier 1 troops can be raised anywhere you rule. Tier 2 and 3 need <b>buildings</b>: Barracks, Archery Range, Stables, and a Siege Workshop for any siege engine.</li><li>Buildings may only be raised in your <b>homeland</b>, or in a conquered city once you <b>annex</b> it.</li><li>A freshly conquered city pays half tribute for 5 turns while the unrest settles.</li><li>Walls toughen the garrison and slow a siege.</li></ul><b>The sea</b><ul><li><b>Port cities</b> build War Galleys from the Recruit tab. The galley appears on the water beside the city.</li><li>Fleets work exactly like armies: tap the fleet, then tap the sea you want. Tap an enemy fleet instead and you strike it.</li><li>Fleets sail 4 sea cells a turn, 6 once you have Admiralty. An enemy fleet blocks the way &mdash; you may strike it, but not sail past it.</li><li>Armies cross water by <b>boarding a fleet</b>: 3 troops per galley. Sail, then land them on a shore you choose. They cannot march the turn they come ashore.</li><li>An enemy fleet sitting on your harbour blockades it and stops you building ships there.</li></ul><b>Diplomacy</b><ul><li>You begin <b>at peace</b> with every crown. Their borders are sealed until you declare war from the <b>Diplomacy</b> panel.</li><li>Free lords &mdash; the grey cities &mdash; may be attacked at any time.</li><li>Enemy land is tinted red and hatched. Declaring war costs no gold, but every other crown thinks less of you.</li></ul><b>Research</b><ul><li>Two researches a turn. Each level adds 10% damage to its track.</li></ul>';
 // v5.6j: there was no version marker anywhere in the game, so "is the deployed file the current
 // one" could only ever be answered by diffing bytes. It is now on screen, at the foot of Help.
-const GAME_VERSION='v7.0';
+const GAME_VERSION='v7.0a';
 // garrison strength band for cities you do not own (no exact numbers — Nabeel's fog rule)
 // jump straight to one of your cities
 let _toastT=null;
@@ -2638,10 +2638,11 @@ function hoursTo(cid,dest){
 }
 function etaLabel(h){
   if(h===null||h===undefined)return '';
+  const num=(v)=>{const r=Math.round(v*10)/10;return (r%1===0)?String(Math.round(r)):r.toFixed(1);};
   if(h<1)return Math.max(1,Math.round(h*60))+' min';
-  if(h<24)return (h<10?h.toFixed(1):Math.round(h))+' hr';
-  const d=h/24;
-  return (d<10?d.toFixed(1):Math.round(d))+' days';
+  if(h<24){const v=num(h);return v+(v==='1'?' hr':' hrs');}
+  const v=num(h/24);
+  return v+(v==='1'?' day':' days');
 }
 
 function takeForce5(cellId,want){
@@ -2901,7 +2902,7 @@ function intercept5(fromCell,colCell,force,attackerKey,opts){
 }
 
 function oddsOfIntercept(force,colCell,attackerKey){
-  const col=G.armies[colCell];
+  const col=(G.col&&G.col[colCell])||G.armies[colCell];
   if(!col||!cnt(col.u))return 1;
   const Sa=strength(force,col.u,false,false,attackerKey);
   const Sd=Math.max(strength(col.u,force,false,false,col.e)*INTERCEPT_STRUNG*(1-0.2*(col.w?1:0)),0.01);
@@ -3092,30 +3093,15 @@ function advanceOrders(e){
   }
 }
 
+// v7: both of these counted turns. They return HOURS now, and the interface words them.
 function etaToCell(fromCid,toCid){
-  const a=G.armies[fromCid];
-  if(!a)return null;
-  if(G.marchInfo&&G.marchInfo.targets[toCid])return 0;   // reachable this turn
-  const path=fullPathTo(fromCid,toCid,a.e);
-  if(!path||path.length<2)return null;
-  let d=0;
-  for(let i=0;i+1<path.length;i++)d+=stepCost(path[i],path[i+1]);
-  if(a.to&&a.p)d-=a.p*stepCost(fromCid,a.to);
-  const want={};UKEYS.forEach(t=>{want[t]=Math.max(0,Math.min((G.send&&G.send[t])||0,a.u[t]||0));});
-  const rng=Math.max(0.1,forceRange(a,cnt(want)?want:a.u)+(G.forced?2:0));
-  return Math.max(1,Math.ceil(d/rng));
+  return hoursTo(fromCid,toCid);
 }
 
 function orderEtaTurns(cid){
   const a=G.armies[cid];
   if(!a||!a.ord)return null;
-  const path=fullPathTo(cid,a.ord,a.e);
-  if(!path)return null;
-  let remaining=0;
-  for(let i=0;i+1<path.length;i++)remaining+=stepCost(path[i],path[i+1]);
-  if(a.to&&a.p)remaining-=a.p*stepCost(cid,a.to);
-  const rng=Math.max(0.1,forceRange(a,a.u));
-  return Math.max(1,Math.ceil(remaining/rng));
+  return hoursTo(cid,a.ord);
 }
 
 function layStartSiege(fromCell,cityCell,want,e){
@@ -3294,11 +3280,9 @@ function aiArmyAct(k,cid,want,P,D){
     const Sa=strength(want,gar?gar.u:{},false,false,k);
     const Sd=Math.max(strength(gar?gar.u:{},want,true,!!provOf(tgt.pid).cap,gar?gar.e:'neutral'),0.2);
     if(!gar||Sa/Sd>P.thr+D.thr){
-      delete army.ord;
-      const r=executeMarch(cid,tgt.cell,want,false,k);
-      if(r&&r.type==='battle'){logBattle5(r.rep);coolDown(G.armies[cid]);coolDown(G.armies[tgt.cell]);}
-      else if(r&&r.type==='intercept')logIntercept(r.rep);
-      return true;
+      // v7: an assault is a march into the province, not an instant event. The column crosses and
+      // fights on arrival, so the defender has the crossing time to react.
+      return !!departColumn(cid,tgt.cell,want,k);
     }
     if(cnt(want)>=4&&Math.random()<0.35){layStartSiege(cid,tgt.cell,want,k);return true;}
     return false;
@@ -4515,7 +4499,7 @@ function showDiplomacy(){
     const tr=d.truce;
     h+='<div class="trow"><span class="crest" style="background:'+empColor(k)+'"></span>';
     h+='<div class="tinfo"><div class="tname">'+empName(k)+' <span style="font-size:12px;color:'+(war?'var(--danger)':'#7ec97e')+'">'+(war?'AT WAR':'at peace')+'</span></div>';
-    h+='<div class="tdesc">Opinion of you: <span style="color:'+rl.c+'">'+rl.t+'</span> &middot; '+provsOf(k).length+' cities'+(tr?' &middot; truce '+tr+' turns':'')+'</div>';
+    h+='<div class="tdesc">Opinion of you: <span style="color:'+rl.c+'">'+rl.t+'</span> &middot; '+provsOf(k).length+' cities'+(tr?' &middot; truce '+etaLabel(tr*DAY_H):'')+'</div>';
     h+='</div>';
     if(war)h+='<button onclick="offerPeace(\''+k+'\')">Offer peace</button>';
     else h+='<button '+(tr?'disabled title="A truce holds"':'')+' onclick="playerDeclare(\''+k+'\')">Declare war</button>';
@@ -4827,7 +4811,8 @@ function updateMap(){
     // v5.6m: say how long it takes to get there, the turn-based read of CoN's arrival tooltip.
     if(G.mode&&G.selArmy){
       const t=targets[cid]
-        ? (targets[cid].icept?'Strike this column now':(G.mode==='attack'?'Attack this turn':'Arrives this turn'))
+        ? (targets[cid].icept?'Strike this column now'
+           :(targets[cid].d!==undefined?(G.mode==='attack'?'Strike in ':'Arrives in ')+etaLabel(targets[cid].d):'Arrives'))
         : null;
       if(t)el.setAttribute('data-eta',t); else el.removeAttribute('data-eta');
     }else el.removeAttribute('data-eta');
@@ -4938,7 +4923,14 @@ function updateMap(){
     const col=empColor(a.e);
     const dt=domType(a.u);
     const sel=(it.isCol?G.selCol:G.selArmy)===cid;
-    ah+='<g class="armyfig'+(it.isCol?' oncol':'')+'" data-a="'+cid+'"'+(it.isCol?' data-col="1"':'')+'>';
+    // An interception target is a column, and columns are drawn here rather than on the cell
+    // layer, so the target ring has to be painted here too or a strikeable column looks inert.
+    const isTgt=!!(it.isCol&&G.targeting&&G.selArmy&&G.marchInfo&&G.marchInfo.targets[cid]);
+    ah+='<g class="armyfig'+(it.isCol?' oncol':'')+(isTgt?' coltgt':'')+'" data-a="'+cid+'"'+(it.isCol?' data-col="1"':'')+'>';
+    if(isTgt){
+      ah+='<circle cx="'+c.x+'" cy="'+c.y+'" r="'+(20*s)+'" fill="#c94040" opacity="0.22"/>';
+      ah+='<circle cx="'+c.x+'" cy="'+c.y+'" r="'+(20*s)+'" fill="none" stroke="#ff6b4a" stroke-width="'+(2.4*s)+'" stroke-dasharray="'+(5*s)+' '+(3.5*s)+'"><title>Strike this column</title></circle>';
+    }
     ah+='<circle cx="'+c.x+'" cy="'+c.y+'" r="'+(16*s)+'" fill="transparent"/>';
     if(sel){
       const rr=21*s;
@@ -5239,7 +5231,7 @@ function cellClick(cid){
         // v5.6m: tell them how long it takes, the turn equivalent of CoN's arrival tooltip.
         const eta=etaToCell(G.selArmy,cid);
         const where=destCell.city?provOf(destCell.p).city:'the target';
-        const when=eta?' &middot; arrives in <b>'+eta+' turn'+(eta>1?'s':'')+'</b>':'';
+        const when=eta!==null&&eta!==undefined?' &middot; arrives in <b>'+etaLabel(eta)+'</b>':'';
         if(hostile)toast('March order set &mdash; the army halts beside the enemy at <b>'+where+'</b>'+when+'; order the attack when it arrives.');
         else toast('Marching to <b>'+where+'</b>'+when+'.');
         advanceOrders(G.player);
@@ -5268,7 +5260,7 @@ function cellClick(cid){
   UKEYS.forEach(t=>{want[t]=Math.max(0,Math.min((G.send&&G.send[t])||0,army.u[t]||0));});
   if(cnt(want)===0){G.targeting=false;G.marchInfo=null;renderAll();return;}
   const tg=G.marchInfo.targets[cid];
-  const def=G.armies[cid];
+  let def=G.armies[cid];
   const forced=!!G.forced;
   const blocker=blockerAt(cid,G.player);
   if(blocker){                              // a treaty stands between you and this target
@@ -5281,13 +5273,17 @@ function cellClick(cid){
     return;
   }
   if(tg.icept){
-    if(!onTheMarch(def)){toast('That column has already halted.');G.targeting=false;G.marchInfo=null;renderAll();return;}
+    // v7: what you are striking is a column, which lives in G.col under its own id. This still
+    // looked it up in G.armies, found nothing, and told you it had halted — every single time.
+    const col=G.col&&G.col[cid];
+    if(!col){toast('That column has already halted.');G.targeting=false;G.marchInfo=null;renderAll();return;}
+    def=col;
     const force={};for(const t in want)if(want[t])force[t]=want[t];
     const p=oddsOfIntercept(force,cid,G.player);
     showModal('Strike the column?',
       battleCard(force,G.player,def.u,def.e)+
       '<div class="meta" style="text-align:center;margin-top:4px">'+empName(def.e)+"'s troops are strung out on the march. They fight at <b>&minus;40%</b> and cannot form a line &mdash; but they will break off and fall back rather than stand and die, so you will not destroy them outright.</div>"+
-      '<div class="meta" style="text-align:center">The strike costs you the rest of this turn’s movement. It costs them the crossing they had made and the march order behind it.</div>'+
+      '<div class="meta" style="text-align:center">Your men will need a few hours to reform afterwards. It costs them the crossing they had made and the march order behind it.</div>'+
       '<div style="text-align:center;margin-top:4px">Estimated odds: <b>'+Math.round(p*100)+'%</b> &mdash; '+oddsLabel(p)+'</div>',
       [['Strike!',()=>{closeModal();doIntercept(from,cid,want);},'primary'],['Cancel',closeModal,'']]);
     return;
@@ -5299,14 +5295,19 @@ function cellClick(cid){
     const pct=Math.round(p*100);
     const cell=cellOf(cid);
     const nm=cell.city?provOf(cell.p).city:'the enemy army';
+    // v7: an assault is a march. Say how long they will be on the road, because the defender has
+    // that long to reinforce and you have that long to be intercepted.
+    const marchH=hoursTo(from,cid);
     const btns=[['Assault!',()=>{closeModal();doMarch(from,cid,want,forced);},'primary']];
     if(cell.city){btns.push(['Lay siege',()=>{closeModal();doSiege(from,cid,want);},'']);}
     btns.push(['Cancel',closeModal,'']);
     showModal('Attack '+nm+'?',
       battleCard(force,G.player,def.u,def.e)+
       (isFm?'<div class="meta" style="text-align:center">Forced march: your troops fight winded (&minus;20%).</div>':'')+
-      '<div style="text-align:center;margin-top:4px">Estimated odds: <b>'+pct+'%</b> &mdash; '+oddsLabel(p)+'</div>'+
-      (cell.city?'<div class="meta" style="text-align:center;margin-top:4px">Or lay siege: dig in next to the city and starve the garrison down over several turns (slow but no assault losses).</div>':''),
+      (marchH!==null?'<div class="meta" style="text-align:center;margin-top:4px">Your column will be <b>'+etaLabel(marchH)+
+        '</b> on the road before it strikes. They can reinforce in that time, and anyone beside the road can cut you down on the way.</div>':'')+
+      '<div style="text-align:center;margin-top:4px">Estimated odds now: <b>'+pct+'%</b> &mdash; '+oddsLabel(p)+'</div>'+
+      (cell.city?'<div class="meta" style="text-align:center;margin-top:4px">Or lay siege: dig in next to the city and starve the garrison down over days (slow but no assault losses).</div>':''),
       btns);
   }else{
     doMarch(from,cid,want,forced);
@@ -5343,17 +5344,19 @@ function doMarch(from,cid,want,forced){
   const a=G.armies[from];
   if(!a)return;
   delete a.ord; delete a.siege;
-  const adjacent=moveAdj(from).includes(cid);
   const icept=!!(G.marchInfo&&G.marchInfo.targets[cid]&&G.marchInfo.targets[cid].icept);
-  // v7: a distant destination is an ORDER, not a move. The clock walks the column there over real
-  // hours. Only something next door resolves now, and only an attack or an interception does.
-  if(!adjacent&&!icept){
+  // v7: EVERY move is a march, next door included. Storming the city over the border still means
+  // crossing to it, so the column sets off and the battle happens when it arrives. Only an
+  // interception is instant, because the column you are striking is already beside you.
+  if(!icept){
     const h=hoursTo(from,cid);
     const id=departColumn(from,cid,want,G.player);
     G.targeting=false;G.marchInfo=null;G.send={};
     if(!id){toast('No road that way.');renderAll();return;}
     G.selArmy=G.armies[from]?from:null; G.selCol=id;
-    log('Your column marches for <b>'+provOf(cellOf(cid).p).city+'</b> &mdash; about '+etaLabel(h)+' on the road.','');
+    const hostile=isHostileCell(cid);
+    log((hostile?'Your column marches on <b>':'Your column marches for <b>')+provOf(cellOf(cid).p).city+
+        '</b> &mdash; about '+etaLabel(h)+(hostile?' before they strike.':' on the road.'),'');
     renderAll();openColumnPanel(id);saveGame();
     return;
   }
@@ -5477,7 +5480,7 @@ function openCityPanel(pid){
   }
   if(tab==='ov'||!mine){
     const inc=mine?Math.round(cityIncome(pid,own)):null;
-    h+='<div class="meta">'+empName(own)+(mine?' &middot; '+inc+' gold/turn'+(occupTurnsLeft(pid)?' <span style="color:var(--danger)">(unrest &minus;50%, '+occupTurnsLeft(pid)+' turns left)</span>':''):'')+' &middot; '+pv.cells.length+' lands'+(pv.cap?' &middot; capital':'')+'</div>';
+    h+='<div class="meta">'+empName(own)+(mine?' &middot; '+inc+' gold/day'+(occupTurnsLeft(pid)?' <span style="color:var(--danger)">(unrest &minus;50%, '+etaLabel(occupTurnsLeft(pid)*DAY_H)+' left)</span>':''):'')+' &middot; '+pv.cells.length+' lands'+(pv.cap?' &middot; capital':'')+'</div>';
     if(gar){
       if(mine)h+='<div class="meta">Garrison: '+cnt(gar.u)+' troops</div>';
       else{const b=garrisonBand(cnt(gar.u));h+='<div class="meta">Garrison: <span style="color:'+b.cls+'">'+b.txt+'</span> ('+empName(gar.e)+') &mdash; scouts report strength, not numbers.</div>';}
@@ -5495,12 +5498,12 @@ function openCityPanel(pid){
       :isAnnexed(pid,G.player)?'<span style="color:var(--gold)">Annexed city</span> &mdash; can build.'
       :'Conquered city &mdash; tier-1 recruits only until you annex it.')+'</div>';
     const q0=(G.buildQ||{})[pid];
-    if(q0)h+='<div class="meta">'+(q0.b===ANNEX_KEY?'&#127983; Annexation':(String(q0.b).indexOf(ROAD_KEY)===0?'&#128739; Road to '+provOf(String(q0.b).slice(ROAD_KEY.length)).city:'&#128296; '+BLD[q0.b].name))+' ready in '+q0.left+' turn'+(q0.left>1?'s':'')+'.</div>';
+    if(q0)h+='<div class="meta">'+(q0.b===ANNEX_KEY?'&#127983; Annexation':(String(q0.b).indexOf(ROAD_KEY)===0?'&#128739; Road to '+provOf(String(q0.b).slice(ROAD_KEY.length)).city:'&#128296; '+BLD[q0.b].name))+' ready in '+etaLabel(q0.left*DAY_H)+'.</div>';
     if(mine){                                  // pass 4f: the default tab used to hide the training queue entirely
       const tq=queueOf(pid);
       if(tq.length){
         const soonest=Math.min.apply(null,tq.map(x=>x.left));
-        h+='<div class="meta">&#9876; In training: '+tq.length+' unit'+(tq.length>1?'s':'')+' &mdash; next in '+soonest+' turn'+(soonest>1?'s':'')+'.</div>';
+        h+='<div class="meta">&#9876; In training: '+tq.length+' unit'+(tq.length>1?'s':'')+' &mdash; next in '+etaLabel(soonest*DAY_H)+'.</div>';
       }
     }
     if(mine&&!G.over){
@@ -5537,7 +5540,7 @@ function openCityPanel(pid){
       tq.forEach((q,i)=>{
         h+='<div class="brow2"><div class="bic">'+artSvg(q.t,34,empColor(G.player))+'</div>'+
            '<div class="bmid"><div class="bnm">'+UNITS[q.t].name+'</div>'+
-           '<div class="bcost"><span class="ci">&#9203; '+q.left+' turn'+(q.left>1?'s':'')+' left</span></div></div>'+
+           '<div class="bcost"><span class="ci">&#9203; '+etaLabel(q.left*DAY_H)+' left</span></div></div>'+
            '<div class="bact"><button onclick="cancelTrain(\''+pid+'\','+i+')">Cancel</button></div></div>';
       });
     }
@@ -5572,7 +5575,7 @@ function openCityPanel(pid){
         });
       });
       if(nextLock)h+=nextLock;
-      h+='<div class="meta" style="font-size:10.5px;margin-top:8px;opacity:.8">&#128176; gold &middot; &#9876; damage each round &middot; &#10084; damage it can absorb &middot; &#128737; armour, subtracted from every hit. Training takes 1 turn at tier 1, 2 at tier 2, 3 at tier 3.</div>';
+      h+='<div class="meta" style="font-size:10.5px;margin-top:8px;opacity:.8">&#128176; gold &middot; &#9876; damage each round &middot; &#10084; damage it can absorb &middot; &#128737; armour, subtracted from every hit. Training takes a day at tier 1, two at tier 2, three at tier 3.</div>';
     }
   }
   if(mine&&!G.over&&tab==='bld'){
@@ -5580,19 +5583,19 @@ function openCityPanel(pid){
       const aq=(G.buildQ||{})[pid];
       h+='<div class="meta">A <b>conquered city</b>. It pays tribute and musters tier-1 troops, but raises nothing until you <b>annex</b> it into your realm.</div>';
       if(aq&&aq.b===ANNEX_KEY){
-        h+='<div class="meta">&#127983; Annexation under way &mdash; complete in '+aq.left+' turn'+(aq.left>1?'s':'')+'.</div>';
+        h+='<div class="meta">&#127983; Annexation under way &mdash; complete in '+etaLabel(aq.left*DAY_H)+'.</div>';
       }else if(occupTurnsLeft(pid)>0){
-        h+='<div class="meta">&#9203; The city is still restless. Annexation may begin in '+occupTurnsLeft(pid)+' turn'+(occupTurnsLeft(pid)>1?'s':'')+'.</div>';
+        h+='<div class="meta">&#9203; The city is still restless. Annexation may begin in '+etaLabel(occupTurnsLeft(pid)*DAY_H)+'.</div>';
       }else{
         const ac=annexCost(pid),at=annexTurns(pid);
-        h+='<div class="buildrow" style="align-items:flex-start"><span><b>Annex '+pv.city+'</b><br><span style="color:var(--muted);font-size:11.5px">Takes '+at+' turns. Afterwards this city builds and trains every tier, exactly like your homeland.</span></span>';
+        h+='<div class="buildrow" style="align-items:flex-start"><span><b>Annex '+pv.city+'</b><br><span style="color:var(--muted);font-size:11.5px">Takes '+etaLabel(at*DAY_H)+'. Afterwards this city builds and trains every tier, exactly like your homeland.</span></span>';
         h+='<button '+((e.gold<ac||aq)?'disabled':'')+' onclick="doAnnex(\''+pid+'\')">Annex '+ac+'g</button></div>';
       }
     }else{
       const q=(G.buildQ||{})[pid];
       if(!isHomeCity(pid,G.player))h+='<div class="meta"><span style="color:var(--gold)">Annexed city</span> &mdash; it builds as your homeland does.</div>';
-      if(q&&q.b===ANNEX_KEY)h+='<div class="meta">&#127983; Annexation under way &mdash; complete in '+q.left+' turn'+(q.left>1?'s':'')+'.</div>';
-      else if(q)h+='<div class="meta">&#128296; '+(String(q.b).indexOf(ROAD_KEY)===0?'Road to '+provOf(String(q.b).slice(ROAD_KEY.length)).city:BLD[q.b].name)+' &mdash; ready in '+q.left+' turn'+(q.left>1?'s':'')+'.</div>';
+      if(q&&q.b===ANNEX_KEY)h+='<div class="meta">&#127983; Annexation under way &mdash; complete in '+etaLabel(q.left*DAY_H)+'.</div>';
+      else if(q)h+='<div class="meta">&#128296; '+(String(q.b).indexOf(ROAD_KEY)===0?'Road to '+provOf(String(q.b).slice(ROAD_KEY.length)).city:BLD[q.b].name)+' &mdash; ready in '+etaLabel(q.left*DAY_H)+'.</div>';
       // v5.6k (#2): "Building screen needs more button like feel rather than text" and "need proper
       // section for each building". Each building is now a tile you press, with level pips so you
       // can see what you already have without reading, grouped under named sections.
@@ -5615,7 +5618,7 @@ function openCityPanel(pid){
              '<span class="blv'+(lv?' on':'')+'">'+lv+'</span></div>';
           h+='<div class="bmid"><div class="bnm">'+B.name+'</div>';
           h+='<div class="bcost">'+(maxed?'<span class="bmax">&#10003; Fully built</span>'
-             :'<span class="ci">&#128176; '+cost+'</span><span class="ci">&#9203; '+B.turns+' turn'+(B.turns>1?'s':'')+'</span>')+'</div>';
+             :'<span class="ci">&#128176; '+cost+'</span><span class="ci">&#9203; '+etaLabel(B.turns*DAY_H)+'</span>')+'</div>';
           h+='<div class="bds">'+B.desc+'</div></div>';
           h+='<div class="bact">';
           if(maxed)h+='<span class="bdone">MAX</span>';
@@ -5632,12 +5635,12 @@ function openCityPanel(pid){
         const busy=!!q;
         h+='<div class="brow2"><div class="bic">'+artSvg('cavalry',34,empColor(G.player))+'</div>';
         h+='<div class="bmid"><div class="bnm">Road to '+provOf(np).city+'</div>';
-        h+='<div class="bcost"><span class="ci">&#128176; '+ROAD_COST+'</span><span class="ci">&#9203; '+ROAD_TURNS+' turns</span></div>';
+        h+='<div class="bcost"><span class="ci">&#128176; '+ROAD_COST+'</span><span class="ci">&#9203; '+etaLabel(ROAD_TURNS*DAY_H)+'</span></div>';
         h+='<div class="bds">Marching this link costs 0.6 instead of 1.</div></div>';
         h+='<div class="bact"><button class="'+((e.gold>=ROAD_COST&&!busy)?'primary':'')+'" '+((e.gold<ROAD_COST||busy)?'disabled':'')+
            ' onclick="doBuildRoad(\''+pid+'\',\''+np+'\')">Pave</button></div></div>';
       });
-      h+='<div class="meta" style="margin-top:8px">One project per city &middot; buildings take '+BLD.barracks.turns+' turns, roads '+ROAD_TURNS+'.</div>';
+      h+='<div class="meta" style="margin-top:8px">One project per city &middot; buildings take '+etaLabel(BLD.barracks.turns*DAY_H)+', roads '+etaLabel(ROAD_TURNS*DAY_H)+'.</div>';
     }
   }
   $('panel').innerHTML=h;
@@ -5673,7 +5676,7 @@ function renderBar(){
     line2='&#9876; Besieging '+provOf(cellOf(a.siege).p).city+' &middot; garrison <span style="color:'+sb.cls+'">'+sb.txt+'</span>';
   }else if(a.ord){
     const eta=orderEtaTurns(G.selArmy);
-    line2='&#8674; Marching to '+provOf(cellOf(a.ord).p).city+(eta?' &middot; arrives in '+eta+' turn'+(eta>1?'s':''):'');
+    line2='&#8674; Marching to '+provOf(cellOf(a.ord).p).city+(eta!==null&&eta!==undefined?' &middot; arrives in '+etaLabel(eta):'');
   }else if(marching){
     line2='&#8674; On the road &middot; strung out until it halts';
   }else{
@@ -5851,8 +5854,8 @@ function splitGo(m){
 function showArmyInfo(){
   showModal('Reading the card',
     '<div class="meta"><b>&#128100; Troops</b> &mdash; how many units stand in this stack.</div>'+
-    '<div class="meta"><b>&#10084; Condition</b> &mdash; how much fight is left in them. Wounds heal every turn, fastest inside your own cities.</div>'+
-    '<div class="meta"><b>&#187; Move</b> &mdash; marching left this turn. A plain province link costs 1, a road only 0.6.</div>'+
+    '<div class="meta"><b>&#10084; Condition</b> &mdash; how much fight is left in them. Wounds heal by the hour, fastest inside your own cities.</div>'+
+    '<div class="meta"><b>&#187; Move</b> &mdash; tap anywhere you can reach and the column sets off. Foot cross a province in 6 hours, 3.6 on a road; horse in 3.</div>'+
     '<div class="meta"><b>&#9876; Strength</b> &mdash; an estimate of what this stack hits for, counting damage, armour and your research.</div>'+
     '<div class="meta"><b>&#127983; Walls</b> &mdash; the defence the city adds while the garrison holds it.</div>'+
     '<div class="meta" style="margin-top:8px">Press <b>Move</b> or <b>Attack</b> first, then tap where. <b>Split</b> divides the stack so only part of it goes.</div>',
