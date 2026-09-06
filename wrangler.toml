@@ -3,7 +3,10 @@
 # Nabeel deploys this from a browser, not a command line: connect this repo to Cloudflare Workers
 # once and every upload deploys it. See DEPLOY-SERVER.md for the six steps.
 
-name = "age-of-crowns"
+# The name has to match the Cloudflare project, or the dashboard warns that the two have drifted.
+# Cloudflare named the project when it was created and a Worker cannot be renamed afterwards, so
+# this side moves instead. The name only decides the workers.dev address; players never see it.
+name = "nabeel-personal-project"
 main = "worker.js"
 compatibility_date = "2026-01-01"
 
